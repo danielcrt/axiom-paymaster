@@ -1,35 +1,28 @@
 // SPDX-License-Identifier: GPL-3.0
 pragma solidity 0.8.23;
 
-/* solhint-disable reason-string */
-/* solhint-disable no-inline-assembly */
-
 import { BasePaymaster } from "account-abstraction/contracts/core/BasePaymaster.sol";
 import { IEntryPoint } from "account-abstraction/contracts/interfaces/IEntryPoint.sol";
-import { UserOperation } from "account-abstraction/contracts/interfaces/UserOperation.sol";
-import { UserOperationLib } from "account-abstraction/contracts/interfaces/UserOperation.sol";
+import { PackedUserOperation, UserOperationLib } from "account-abstraction/contracts/core/UserOperationLib.sol";
 import "account-abstraction/contracts/core/Helpers.sol" as Helpers;
 import "@openzeppelin/contracts/utils/cryptography/ECDSA.sol";
 import "@openzeppelin/contracts/utils/cryptography/MessageHashUtils.sol";
 import { AxiomV2Client } from "@axiom-crypto/v2-periphery/client/AxiomV2Client.sol";
+import { IAxiomV2Query } from "@axiom-crypto/v2-periphery/interfaces/query/IAxiomV2Query.sol";
 
-/**
- * A sample paymaster that uses external service to decide whether to pay for the UserOp.
- * The paymaster trusts an external signer to sign the transaction.
- * The calling user must pass the UserOp to that external signer first, which performs
- * whatever off-chain verification before signing the UserOp.
- * Note that this signature is NOT a replacement for the account-specific signature:
- * - the paymaster checks a signature to agree to PAY for GAS.
- * - the account checks a signature to prove identity and account ownership.
- */
-contract VerifyingPaymaster is BasePaymaster {
+interface IAxiomV2QueryExtended {
+    function queries(uint256 queryId) external returns (IAxiomV2Query.AxiomQueryMetadata memory);
+}
+
+contract AxiomPaymaster is BasePaymaster, AxiomV2Client {
     using UserOperationLib for PackedUserOperation;
-
-    address public immutable verifyingSigner;
 
     uint256 private constant VALID_TIMESTAMP_OFFSET = PAYMASTER_DATA_OFFSET;
 
     uint256 private constant SIGNATURE_OFFSET = VALID_TIMESTAMP_OFFSET + 64;
+
+    /// TODO: find correct value for this
+    uint256 public constant REFUND_POST_OP_COST = 63_000;
 
     /// @dev The unique identifier of the circuit accepted by this contract.
     bytes32 immutable QUERY_SCHEMA;
@@ -39,95 +32,57 @@ contract VerifyingPaymaster is BasePaymaster {
 
     /// @dev provenGasSpent[address] = Proven gas spent (in wei)
     mapping(address => uint256) public provenGasSpent;
+    /// @dev lastProvenBlock[address] = Latest time a user was refunded for
+    mapping(address => uint256) public lastProvenBlock;
+
+    mapping(address => uint256) public refundCutoff;
+
+    uint256 public maxRefundPerBlock;
 
     /// @notice Construct a new AverageBalance contract.
     /// @param  _axiomV2QueryAddress The address of the AxiomV2Query contract.
     /// @param  _callbackSourceChainId The ID of the chain the query reads from.
     constructor(
         IEntryPoint _entryPoint,
-        address _verifyingSigner,
         address _axiomV2QueryAddress,
         uint64 _callbackSourceChainId,
-        bytes32 _querySchema
+        bytes32 _querySchema,
+        uint256 _maxRefundPerBlock
     ) BasePaymaster(_entryPoint) AxiomV2Client(_axiomV2QueryAddress) {
-        verifyingSigner = _verifyingSigner;
         QUERY_SCHEMA = _querySchema;
         SOURCE_CHAIN_ID = _callbackSourceChainId;
+        maxRefundPerBlock = _maxRefundPerBlock;
     }
 
-    /**
-     * return the hash we're going to sign off-chain (and validate on-chain)
-     * this method is called by the off-chain service, to sign the request.
-     * it is called on-chain from the validatePaymasterUserOp, to validate the signature.
-     * note that this signature covers all fields of the UserOperation, except the "paymasterAndData",
-     * which will carry the signature itself.
-     */
-    function getHash(PackedUserOperation calldata userOp, uint48 validUntil, uint48 validAfter)
-        public
-        view
-        returns (bytes32)
-    {
-        //can't use userOp.hash(), since it contains also the paymasterAndData itself.
-        address sender = userOp.getSender();
-        return keccak256(
-            abi.encode(
-                sender,
-                userOp.nonce,
-                keccak256(userOp.initCode),
-                keccak256(userOp.callData),
-                userOp.accountGasLimits,
-                uint256(bytes32(userOp.paymasterAndData[PAYMASTER_VALIDATION_GAS_OFFSET:PAYMASTER_DATA_OFFSET])),
-                userOp.preVerificationGas,
-                userOp.gasFees,
-                block.chainid,
-                address(this),
-                validUntil,
-                validAfter
-            )
-        );
-    }
-
-    /**
-     * verify our external signer signed this request.
-     * the "paymasterAndData" is expected to be the paymaster and a signature over the entire request params
-     * paymasterAndData[:20] : address(this)
-     * paymasterAndData[20:84] : abi.encode(validUntil, validAfter)
-     * paymasterAndData[84:] : signature
-     */
     function _validatePaymasterUserOp(
         PackedUserOperation calldata userOp,
         bytes32, /*userOpHash*/
-        uint256 requiredPreFund
+        uint256 /*requiredPreFund*/
     ) internal view override returns (bytes memory context, uint256 validationData) {
-        (requiredPreFund);
+        uint256 dataLength = userOp.paymasterAndData.length - PAYMASTER_DATA_OFFSET;
+        require(dataLength == 0 || dataLength == 32, "APM: invalid data length");
+        require(REFUND_POST_OP_COST < userOp.unpackPostOpGasLimit(), "TPM: postOpGasLimit too low");
 
-        (uint48 validUntil, uint48 validAfter, bytes calldata signature) =
-            parsePaymasterAndData(userOp.paymasterAndData);
-        //ECDSA library supports both 64 and 65-byte long signatures.
-        // we only "require" it here so that the revert reason on invalid signature will be of "VerifyingPaymaster", and not "ECDSA"
-        require(
-            signature.length == 64 || signature.length == 65,
-            "VerifyingPaymaster: invalid signature length in paymasterAndData"
-        );
-        bytes32 hash = MessageHashUtils.toEthSignedMessageHash(getHash(userOp, validUntil, validAfter));
-
-        //don't revert on signature failure: return SIG_VALIDATION_FAILED
-        if (verifyingSigner != ECDSA.recover(hash, signature)) {
-            return ("", _packValidationData(true, validUntil, validAfter));
-        }
-
-        //no need for other on-chain validation: entire UserOp should have been checked
-        // by the external service prior to signing it.
-        return ("", _packValidationData(false, validUntil, validAfter));
+        context = abi.encode(userOp.sender);
+        validationData = Helpers.SIG_VALIDATION_SUCCESS;
     }
 
-    function parsePaymasterAndData(bytes calldata paymasterAndData)
-        public
-        pure
-        returns (uint48 validUntil, uint48 validAfter, bytes calldata signature)
+    /// @notice Performs post-operation tasks, such as updating the token price and refunding excess tokens.
+    /// @dev This function is called after a user operation has been executed or reverted.
+    /// @param context The context containing the token amount and user sender address.
+    /// @param actualGasCost The actual gas cost of the transaction.
+    /// @param /*actualUserOpFeePerGas*/ - the gas price this UserOp pays. This value is based on the UserOp's maxFeePerGas
+    //      and maxPriorityFee (and basefee)
+    //      It is not the same as tx.gasprice, which is what the bundler pays.
+    function _postOp(PostOpMode, bytes calldata context, uint256 actualGasCost, uint256 /*actualUserOpFeePerGas*/ )
+        internal
+        override
     {
-        (validUntil, validAfter) = abi.decode(paymasterAndData[VALID_TIMESTAMP_OFFSET:], (uint48, uint48));
-        signature = paymasterAndData[SIGNATURE_OFFSET:];
+        (address payable userOpSender) = abi.decode(context, (address));
+        if (actualGasCost < provenGasSpent[userOpSender] && refundCutoff[userOpSender] > block.number) {
+            provenGasSpent[userOpSender] -= actualGasCost;
+            userOpSender.transfer(actualGasCost);
+        }
     }
 
     /// @inheritdoc AxiomV2Client
@@ -149,18 +104,22 @@ contract VerifyingPaymaster is BasePaymaster {
         uint64, // sourceChainId,
         address, // caller,
         bytes32, // querySchema,
-        uint256, // queryId,
+        uint256 queryId, // queryId,
         bytes32[] calldata axiomResults,
         bytes calldata // extraData
     ) internal override {
         address addr = address(uint160(uint256(axiomResults[0])));
-        uint256 gasSpent = uint256(axiomResults[1]);
+        uint256 blockNumberStart = uint256(axiomResults[1]);
+        uint256 blockNumberEnd = uint256(axiomResults[2]);
 
-        /**
-         * @todo update logic
-         */
-        provenGasSpent[addr] = gasSpent;
+        require(blockNumberStart > lastProvenBlock[addr]);
 
-        emit GasSpentStored(addr, gasSpent);
+        uint256 axiomFee = IAxiomV2QueryExtended(axiomV2QueryAddress).queries(queryId).payment;
+
+        provenGasSpent[addr] += (blockNumberEnd - blockNumberStart) * maxRefundPerBlock + axiomFee;
+        refundCutoff[addr] += blockNumberEnd - blockNumberStart;
+        lastProvenBlock[addr] = blockNumberEnd;
+
+        // emit GasSpentStored(addr, gasSpent);
     }
 }
