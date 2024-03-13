@@ -40,6 +40,7 @@ contract AxiomPaymasterTest is AxiomTest, BaseTest {
         paymaster = new AxiomPaymaster(
             IEntryPoint(entryPoint), axiomV2QueryAddress, uint64(block.chainid), querySchema, maxRefundPerBlock
         );
+        vm.deal({ account: payable(address(paymaster)), newBalance: 100 ether });
     }
 
     function test_paymaster_accepts_user_op() public {

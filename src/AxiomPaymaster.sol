@@ -19,7 +19,7 @@ contract AxiomPaymaster is BasePaymaster, AxiomV2Client {
     using UserOperationLib for PackedUserOperation;
 
     /// TODO: find correct value for this
-    uint128 public constant REFUND_POST_OP_COST = 1_000_000;
+    uint128 public constant REFUND_POST_OP_COST = 21_000;
 
     /// @dev The unique identifier of the circuit accepted by this contract.
     bytes32 immutable QUERY_SCHEMA;
@@ -83,8 +83,9 @@ contract AxiomPaymaster is BasePaymaster, AxiomV2Client {
             userOpSender.transfer(actualGasCost);
         }
 
+        uint256 consumed = gasleft() - preGas;
         console.log("gasleft");
-        console.log(gasleft() - preGas);
+        console.log(consumed);
     }
 
     /// @inheritdoc AxiomV2Client
