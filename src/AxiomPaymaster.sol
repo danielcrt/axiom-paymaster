@@ -9,6 +9,7 @@ import "@openzeppelin/contracts/utils/cryptography/ECDSA.sol";
 import "@openzeppelin/contracts/utils/cryptography/MessageHashUtils.sol";
 import { AxiomV2Client } from "@axiom-crypto/v2-periphery/client/AxiomV2Client.sol";
 import { IAxiomV2Query } from "@axiom-crypto/v2-periphery/interfaces/query/IAxiomV2Query.sol";
+import "forge-std/console.sol";
 
 interface IAxiomV2QueryExtended {
     function queries(uint256 queryId) external returns (IAxiomV2Query.AxiomQueryMetadata memory);
@@ -17,12 +18,8 @@ interface IAxiomV2QueryExtended {
 contract AxiomPaymaster is BasePaymaster, AxiomV2Client {
     using UserOperationLib for PackedUserOperation;
 
-    uint256 private constant VALID_TIMESTAMP_OFFSET = PAYMASTER_DATA_OFFSET;
-
-    uint256 private constant SIGNATURE_OFFSET = VALID_TIMESTAMP_OFFSET + 64;
-
     /// TODO: find correct value for this
-    uint256 public constant REFUND_POST_OP_COST = 63_000;
+    uint128 public constant REFUND_POST_OP_COST = 1_000_000;
 
     /// @dev The unique identifier of the circuit accepted by this contract.
     bytes32 immutable QUERY_SCHEMA;
@@ -38,6 +35,8 @@ contract AxiomPaymaster is BasePaymaster, AxiomV2Client {
     mapping(address => uint256) public refundCutoff;
 
     uint256 public maxRefundPerBlock;
+
+    error PostOpGasLimitTooLow();
 
     /// @notice Construct a new AverageBalance contract.
     /// @param  _axiomV2QueryAddress The address of the AxiomV2Query contract.
@@ -58,18 +57,17 @@ contract AxiomPaymaster is BasePaymaster, AxiomV2Client {
         PackedUserOperation calldata userOp,
         bytes32, /*userOpHash*/
         uint256 /*requiredPreFund*/
-    ) internal view override returns (bytes memory context, uint256 validationData) {
-        uint256 dataLength = userOp.paymasterAndData.length - PAYMASTER_DATA_OFFSET;
-        require(dataLength == 0 || dataLength == 32, "APM: invalid data length");
-        require(REFUND_POST_OP_COST < userOp.unpackPostOpGasLimit(), "TPM: postOpGasLimit too low");
-
+    ) internal view override returns (bytes memory context, uint256 validationResult) {
+        if (REFUND_POST_OP_COST > userOp.unpackPostOpGasLimit()) {
+            revert PostOpGasLimitTooLow();
+        }
         context = abi.encode(userOp.sender);
-        validationData = Helpers.SIG_VALIDATION_SUCCESS;
+        validationResult = Helpers._packValidationData(false, 0, 0);
     }
 
     /// @notice Performs post-operation tasks, such as updating the token price and refunding excess tokens.
     /// @dev This function is called after a user operation has been executed or reverted.
-    /// @param context The context containing the token amount and user sender address.
+    /// @param context The context containing the user sender address.
     /// @param actualGasCost The actual gas cost of the transaction.
     /// @param /*actualUserOpFeePerGas*/ - the gas price this UserOp pays. This value is based on the UserOp's maxFeePerGas
     //      and maxPriorityFee (and basefee)
@@ -78,11 +76,15 @@ contract AxiomPaymaster is BasePaymaster, AxiomV2Client {
         internal
         override
     {
+        uint256 preGas = gasleft();
         (address payable userOpSender) = abi.decode(context, (address));
         if (actualGasCost < provenGasSpent[userOpSender] && refundCutoff[userOpSender] > block.number) {
             provenGasSpent[userOpSender] -= actualGasCost;
             userOpSender.transfer(actualGasCost);
         }
+
+        console.log("gasleft");
+        console.log(gasleft() - preGas);
     }
 
     /// @inheritdoc AxiomV2Client
