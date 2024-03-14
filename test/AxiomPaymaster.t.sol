@@ -50,9 +50,9 @@ contract AxiomPaymasterTest is AxiomTest, BaseTest {
 
         uint256 storedValue = 1;
 
-        bytes memory interactCallData = abi.encodeWithSelector(SimpleProtocol.interact.selector, storedValue);
+        bytes memory storeCallData = abi.encodeWithSelector(SimpleProtocol.store.selector, storedValue);
         bytes memory callData =
-            abi.encodeWithSelector(SimpleAccount.execute.selector, address(protocol), 0, interactCallData);
+            abi.encodeWithSelector(SimpleAccount.execute.selector, address(protocol), 0, storeCallData);
 
         userOp.sender = address(account);
         userOp.paymaster = address(paymaster);
@@ -67,7 +67,7 @@ contract AxiomPaymasterTest is AxiomTest, BaseTest {
         packedOps[0] = opPacked;
 
         vm.expectEmit(true, true, true, true, address(protocol));
-        emit SimpleProtocol.InputStored(address(account), storedValue);
+        emit SimpleProtocol.StoreInput(address(account), storedValue);
 
         entryPoint.handleOps(packedOps, beneficiaryAddress);
     }
@@ -77,8 +77,8 @@ contract AxiomPaymasterTest is AxiomTest, BaseTest {
 
         vm.startPrank({ msgSender: users.u1.addr });
 
-        bytes memory interactCallData = abi.encodeWithSelector(SimpleProtocol.interact.selector, 1);
-        bytes memory callData = abi.encodeWithSelector(SimpleAccount.execute.selector, 0, interactCallData);
+        bytes memory storeCallData = abi.encodeWithSelector(SimpleProtocol.store.selector, 1);
+        bytes memory callData = abi.encodeWithSelector(SimpleAccount.execute.selector, 0, storeCallData);
 
         userOp.sender = address(account);
         userOp.paymaster = address(paymaster);

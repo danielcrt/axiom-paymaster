@@ -18,6 +18,8 @@ interface IAxiomV2QueryExtended {
 contract AxiomPaymaster is BasePaymaster, AxiomV2Client {
     using UserOperationLib for PackedUserOperation;
 
+    uint128 public constant CALLDATA_ADDRESS_OFFSET = 32;
+    uint128 public constant CALLDATA_VALUE_OFFSET = 192;
     /// TODO: find correct value for this
     uint128 public constant REFUND_POST_OP_COST = 21_000;
 
@@ -27,12 +29,9 @@ contract AxiomPaymaster is BasePaymaster, AxiomV2Client {
     /// @dev The chain ID of the chain whose data the callback is expected to be called from.
     uint64 immutable SOURCE_CHAIN_ID;
 
-    /// @dev provenGasSpent[address] = Proven gas spent (in wei)
-    mapping(address => uint256) public provenGasSpent;
-    /// @dev lastProvenBlock[address] = Latest time a user was refunded for
-    mapping(address => uint256) public lastProvenBlock;
-
-    mapping(address => uint256) public refundCutoff;
+    mapping(address => mapping(address => uint256)) public provenGasSpent;
+    mapping(address => mapping(address => uint256)) public lastProvenBlock;
+    mapping(address => mapping(address => uint256)) public refundCutoff;
 
     uint256 public maxRefundPerBlock;
 
@@ -61,7 +60,8 @@ contract AxiomPaymaster is BasePaymaster, AxiomV2Client {
         if (REFUND_POST_OP_COST > userOp.unpackPostOpGasLimit()) {
             revert PostOpGasLimitTooLow();
         }
-        context = abi.encode(userOp.sender);
+        address protocolAddress = abi.decode(userOp.callData[CALLDATA_ADDRESS_OFFSET:CALLDATA_VALUE_OFFSET], (address));
+        context = abi.encode(userOp.sender, protocolAddress);
         validationResult = Helpers._packValidationData(false, 0, 0);
     }
 
@@ -77,9 +77,12 @@ contract AxiomPaymaster is BasePaymaster, AxiomV2Client {
         override
     {
         uint256 preGas = gasleft();
-        (address payable userOpSender) = abi.decode(context, (address));
-        if (actualGasCost < provenGasSpent[userOpSender] && refundCutoff[userOpSender] > block.number) {
-            provenGasSpent[userOpSender] -= actualGasCost;
+        (address payable userOpSender, address protocolAddress) = abi.decode(context, (address, address));
+        if (
+            actualGasCost < provenGasSpent[userOpSender][protocolAddress]
+                && refundCutoff[userOpSender][protocolAddress] > block.number
+        ) {
+            provenGasSpent[userOpSender][protocolAddress] -= actualGasCost;
             userOpSender.transfer(actualGasCost);
         }
 
@@ -112,16 +115,17 @@ contract AxiomPaymaster is BasePaymaster, AxiomV2Client {
         bytes calldata // extraData
     ) internal override {
         address addr = address(uint160(uint256(axiomResults[0])));
-        uint256 blockNumberStart = uint256(axiomResults[1]);
-        uint256 blockNumberEnd = uint256(axiomResults[2]);
+        address protocolAddress = address(uint160(uint256(axiomResults[1])));
+        uint256 blockNumberStart = uint256(axiomResults[2]);
+        uint256 blockNumberEnd = uint256(axiomResults[3]);
 
-        require(blockNumberStart > lastProvenBlock[addr]);
+        require(blockNumberStart > lastProvenBlock[addr][protocolAddress]);
 
         uint256 axiomFee = IAxiomV2QueryExtended(axiomV2QueryAddress).queries(queryId).payment;
 
-        provenGasSpent[addr] += (blockNumberEnd - blockNumberStart) * maxRefundPerBlock + axiomFee;
-        refundCutoff[addr] += blockNumberEnd - blockNumberStart;
-        lastProvenBlock[addr] = blockNumberEnd;
+        provenGasSpent[addr][protocolAddress] += (blockNumberEnd - blockNumberStart) * maxRefundPerBlock + axiomFee;
+        refundCutoff[addr][protocolAddress] += blockNumberEnd - blockNumberStart;
+        lastProvenBlock[addr][protocolAddress] = blockNumberEnd;
 
         // emit GasSpentStored(addr, gasSpent);
     }

@@ -5,19 +5,24 @@ solc = "0.8.23"
 libs = ["node_modules", "lib"]
 remappings = ["@axiom-crypto/axiom-std/=lib/axiom-std/src/"]
 ffi = true
+gas_reports = ["SimpleAccount.sol"]
 
 # See more config options https://github.com/foundry-rs/foundry/tree/master/config
 [rpc_endpoints]
 sepolia = "${PROVIDER_URI_SEPOLIA}"
 mainnet = "${PROVIDER_URI_MAINNET}"
 
+[etherscan]
+mainnet = { key = "${API_KEY_ETHERSCAN}" }
+sepolia = { key = "${API_KEY_ETHERSCAN}" }
+
 [fmt]
-  bracket_spacing = true
-  int_types = "long"
-  line_length = 120
-  multiline_func_header = "attributes_first"
-  number_underscore = "thousands"
-  quote_style = "double"
-  single_line_statement_blocks = "multi"
-  tab_width = 4
-  wrap_comments = false
+bracket_spacing = true
+int_types = "long"
+line_length = 120
+multiline_func_header = "attributes_first"
+number_underscore = "thousands"
+quote_style = "double"
+single_line_statement_blocks = "multi"
+tab_width = 4
+wrap_comments = false

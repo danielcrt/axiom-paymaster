@@ -43,3 +43,8 @@ next-env.d.ts
 app/axiom/data/proven.json
 
 .axiom
+
+# broadcasts
+!broadcast
+broadcast/*
+broadcast/*/31337/

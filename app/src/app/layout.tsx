@@ -5,8 +5,8 @@ import MainLayout from '@/components/layout/MainLayout';
 import AxiomProvider from './axiomProvider';
 
 export const metadata: Metadata = {
-  title: 'Axiom Next.js Quickstart',
-  description: 'A quickstart example that generates a ZK proof of a simple circuit.',
+  title: 'Axiom Paymaster Demo',
+  description: 'An example of GaslessPaymaster powered by ZK proofs.',
 }
 
 export default function RootLayout({
