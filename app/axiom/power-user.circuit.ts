@@ -22,25 +22,22 @@ export interface CircuitInputs {
   contractAddress: CircuitValue;
 }
 
-// Default inputs to use for compiling the circuit. These values should be different than the inputs fed into
-// the circuit at proving time.
 // Tx1: https://sepolia.etherscan.io/tx/0xd948b42d82a9e79dee7b11b984d4fd6c85605b6cb07361b77e1920f56e720cbb
+// Tx2: https://sepolia.etherscan.io/tx/0xff3d5492e940844f2475149d758eded44f686a204484cbf4569ac7e9a97c2b11
+// Tx3: https://sepolia.etherscan.io/tx/0x7e68b872cde4ce2eb4d2dbda1d168025c896cdd21f4ee7b6ad6fbafbf162395d
 export const defaultInputs = {
   // prettier-ignore
-  blockNumbers: [5483082, 5483103, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+  blockNumbers: [5483082, 5483103, 5484715, 5484715, 5484715, 5484715, 5484715, 5484715, 5484715, 5484715, 5484715, 5484715, 5484715, 5484715, 5484715, 5484715, 5484715, 5484715, 5484715, 5484715, 5484715, 5484715, 5484715, 5484715, 5484715, 5484715, 5484715, 5484715, 5484715, 5484715, 5484715, 5484715, 5484715, 5484715, 5484715, 5484715, 5484715, 5484715, 5484715, 5484715, 5484715, 5484715, 5484715, 5484715, 5484715, 5484715, 5484715, 5484715, 5484715, 5484715, 5484715, 5484715],
   // prettier-ignore
-  txIds: [35, 44, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+  txIds: [35, 44, 27, 27, 27, 27, 27, 27, 27, 27, 27, 27, 27, 27, 27, 27, 27, 27, 27, 27, 27, 27, 27, 27, 27, 27, 27, 27, 27, 27, 27, 27, 27, 27, 27, 27, 27, 27, 27, 27, 27, 27, 27, 27, 27, 27, 27, 27, 27, 27, 27, 27],
   // prettier-ignore
   logIdxs: [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-  // https://sepolia.etherscan.io/address/0xa85A7a0C89b41C147ab1ea55e799ECeb11fE0674
-  address: "0x8a6cf8a2f64da5b7dcd9fc3fcf71cce8fb2b3d7e",
+  // https://sepolia.etherscan.io/address/0xa85a7a0c89b41c147ab1ea55e799eceb11fe0674
+  address: "0xa85a7a0c89b41c147ab1ea55e799eceb11fe0674",
   // https://sepolia.etherscan.io/address/0x8A6cF8A2F64da5b7Dcd9FC3FcF71Cce8fB2B3d7e
   contractAddress: "0x8a6cf8a2f64da5b7dcd9fc3fcf71cce8fb2b3d7e",
 };
 
-// The function name `circuit` is searched for by default by our Axiom CLI; if you decide to
-// change the function name, you'll also need to ensure that you also pass the Axiom CLI flag
-// `-f <circuitFunctionName>` for it to work
 export const circuit = async (inputs: CircuitInputs) => {
   // Assumes one block is mined every ~12 seconds
   const oneWeekInBlocks = (7 * 24 * 3600) / 12;
@@ -61,21 +58,17 @@ export const circuit = async (inputs: CircuitInputs) => {
   let lastBlockNumber = inputs.blockNumbers[0];
 
   for (let i = 1; i < maxSamples; i++) {
-    const hasReachedInputEnd = isLessThan(constant(0), inputs.blockNumbers[i]);
-
     // Check the block numbers are in order
-    checkEqual(
-      constant(1),
-      or(
-        isZero(hasReachedInputEnd),
-        isLessThan(inputs.blockNumbers[i - 1], inputs.blockNumbers[i])
-      )
+    const isValid = isLessThan(
+      inputs.blockNumbers[i - 1],
+      inputs.blockNumbers[i]
     );
+
     // Check that the distance between 2 interactions is less than 1 week
     checkEqual(
       constant(1),
       or(
-        isZero(hasReachedInputEnd),
+        isZero(isValid),
         isLessThan(
           sub(inputs.blockNumbers[i], inputs.blockNumbers[i - 1]),
           oneWeekInBlocks
@@ -96,27 +89,23 @@ export const circuit = async (inputs: CircuitInputs) => {
     checkEqual(
       constant(1),
       or(
-        isZero(hasReachedInputEnd),
+        isZero(isValid),
         isEqual(contractAddress.toCircuitValue(), inputs.contractAddress)
       )
     );
     checkEqual(
       constant(1),
       or(
-        isZero(hasReachedInputEnd),
+        isZero(isValid),
         isEqual(inputs.address, topic.toCircuitValue())
       )
     );
 
     lastBlockNumber = select(
-      hasReachedInputEnd,
+      isValid,
       inputs.blockNumbers[i],
       lastBlockNumber
     );
-  }
-
-  if (lastBlockNumber === inputs.blockNumbers[0]) {
-    throw new Error("Nothing to prove here.");
   }
 
   addToCallback(inputs.address);
