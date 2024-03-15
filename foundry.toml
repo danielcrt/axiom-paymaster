@@ -6,6 +6,7 @@ libs = ["node_modules", "lib"]
 remappings = ["@axiom-crypto/axiom-std/=lib/axiom-std/src/"]
 ffi = true
 gas_reports = ["SimpleAccount.sol"]
+ast = true
 
 # See more config options https://github.com/foundry-rs/foundry/tree/master/config
 [rpc_endpoints]

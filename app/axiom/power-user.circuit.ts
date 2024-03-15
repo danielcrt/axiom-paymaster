@@ -16,7 +16,7 @@ import {
 // blockNumbers are expected to be ascending ordered (from oldest to latest)
 export interface CircuitInputs {
   blockNumbers: CircuitValue[];
-  txIds: CircuitValue[];
+  txIdxs: CircuitValue[];
   logIdxs: CircuitValue[];
   addr: CircuitValue;
   contractAddress: CircuitValue;
@@ -29,7 +29,7 @@ export const defaultInputs = {
   // prettier-ignore
   blockNumbers: [5483082, 5483103, 5484715, 5484715, 5484715, 5484715, 5484715, 5484715, 5484715, 5484715, 5484715, 5484715, 5484715, 5484715, 5484715, 5484715, 5484715, 5484715, 5484715, 5484715, 5484715, 5484715, 5484715, 5484715, 5484715, 5484715, 5484715, 5484715, 5484715, 5484715, 5484715, 5484715, 5484715, 5484715, 5484715, 5484715, 5484715, 5484715, 5484715, 5484715, 5484715, 5484715, 5484715, 5484715, 5484715, 5484715, 5484715, 5484715, 5484715, 5484715, 5484715, 5484715],
   // prettier-ignore
-  txIds: [35, 44, 27, 27, 27, 27, 27, 27, 27, 27, 27, 27, 27, 27, 27, 27, 27, 27, 27, 27, 27, 27, 27, 27, 27, 27, 27, 27, 27, 27, 27, 27, 27, 27, 27, 27, 27, 27, 27, 27, 27, 27, 27, 27, 27, 27, 27, 27, 27, 27, 27, 27],
+  txIdxs: [35, 44, 27, 27, 27, 27, 27, 27, 27, 27, 27, 27, 27, 27, 27, 27, 27, 27, 27, 27, 27, 27, 27, 27, 27, 27, 27, 27, 27, 27, 27, 27, 27, 27, 27, 27, 27, 27, 27, 27, 27, 27, 27, 27, 27, 27, 27, 27, 27, 27, 27, 27],
   // prettier-ignore
   logIdxs: [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
   // https://sepolia.etherscan.io/address/0xa85a7a0c89b41c147ab1ea55e799eceb11fe0674
@@ -47,7 +47,7 @@ export const circuit = async (inputs: CircuitInputs) => {
 
   if (
     inputs.blockNumbers.length !== maxSamples ||
-    inputs.txIds.length !== maxSamples ||
+    inputs.txIdxs.length !== maxSamples ||
     inputs.logIdxs.length !== maxSamples
   ) {
     throw new Error(
@@ -76,7 +76,7 @@ export const circuit = async (inputs: CircuitInputs) => {
       )
     );
 
-    const receipt = getReceipt(inputs.blockNumbers[i], inputs.txIds[i]);
+    const receipt = getReceipt(inputs.blockNumbers[i], inputs.txIdxs[i]);
     const log = receipt.log(inputs.logIdxs[i]);
     const topic: CircuitValue256 = await log.topic(
       1,
@@ -95,17 +95,10 @@ export const circuit = async (inputs: CircuitInputs) => {
     );
     checkEqual(
       constant(1),
-      or(
-        isZero(isValid),
-        isEqual(inputs.addr, topic.toCircuitValue())
-      )
+      or(isZero(isValid), isEqual(inputs.addr, topic.toCircuitValue()))
     );
 
-    lastBlockNumber = select(
-      isValid,
-      inputs.blockNumbers[i],
-      lastBlockNumber
-    );
+    lastBlockNumber = select(inputs.blockNumbers[i], lastBlockNumber, isValid);
   }
 
   addToCallback(inputs.addr);
