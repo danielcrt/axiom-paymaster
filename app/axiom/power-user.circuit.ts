@@ -18,7 +18,7 @@ export interface CircuitInputs {
   blockNumbers: CircuitValue[];
   txIds: CircuitValue[];
   logIdxs: CircuitValue[];
-  address: CircuitValue;
+  addr: CircuitValue;
   contractAddress: CircuitValue;
 }
 
@@ -33,7 +33,7 @@ export const defaultInputs = {
   // prettier-ignore
   logIdxs: [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
   // https://sepolia.etherscan.io/address/0xa85a7a0c89b41c147ab1ea55e799eceb11fe0674
-  address: "0xa85a7a0c89b41c147ab1ea55e799eceb11fe0674",
+  addr: "0xa85a7a0c89b41c147ab1ea55e799eceb11fe0674",
   // https://sepolia.etherscan.io/address/0x8A6cF8A2F64da5b7Dcd9FC3FcF71Cce8fB2B3d7e
   contractAddress: "0x8a6cf8a2f64da5b7dcd9fc3fcf71cce8fb2b3d7e",
 };
@@ -97,7 +97,7 @@ export const circuit = async (inputs: CircuitInputs) => {
       constant(1),
       or(
         isZero(isValid),
-        isEqual(inputs.address, topic.toCircuitValue())
+        isEqual(inputs.addr, topic.toCircuitValue())
       )
     );
 
@@ -108,7 +108,7 @@ export const circuit = async (inputs: CircuitInputs) => {
     );
   }
 
-  addToCallback(inputs.address);
+  addToCallback(inputs.addr);
   addToCallback(inputs.contractAddress);
   addToCallback(inputs.blockNumbers[0]);
   addToCallback(lastBlockNumber);

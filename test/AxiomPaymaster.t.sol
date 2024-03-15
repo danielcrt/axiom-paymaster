@@ -16,29 +16,47 @@ import "forge-std/console.sol";
 contract AxiomPaymasterTest is AxiomTest, BaseTest {
     using Axiom for Query;
 
+    uint256 public constant MAX_INPUT_LENGTH = 52;
+
     struct AxiomInput {
-        uint64 blockNumber;
+        uint24[MAX_INPUT_LENGTH] blockNumbers;
+        uint8[MAX_INPUT_LENGTH] txIds;
+        uint8[MAX_INPUT_LENGTH] logIdxs;
         address addr;
+        address contractAddress;
     }
 
     AxiomInput public input;
     bytes32 public querySchema;
     AxiomPaymaster public paymaster;
     address payable public beneficiaryAddress;
+    uint256 public constant MAX_REFUND_PER_BLOCK = 21_000;
 
     function setUp() public override {
         BaseTest.setUp();
         beneficiaryAddress = payable(0x1111111111111111111111111111111111111111);
 
-        uint256 maxRefundPerBlock = 21_000;
+        input = AxiomInput({
+            // forgefmt: disable-next-line
+            blockNumbers: [5483082, 5483103, 5484715, 5484715, 5484715, 5484715, 5484715, 5484715, 5484715, 5484715, 5484715, 5484715, 5484715, 5484715, 5484715, 5484715, 5484715, 5484715, 5484715, 5484715, 5484715, 5484715, 5484715, 5484715, 5484715, 5484715, 5484715, 5484715, 5484715, 5484715, 5484715, 5484715, 5484715, 5484715, 5484715, 5484715, 5484715, 5484715, 5484715, 5484715, 5484715, 5484715, 5484715, 5484715, 5484715, 5484715, 5484715, 5484715, 5484715, 5484715, 5484715, 5484715],
+            // prettier-ignore
+            // forgefmt: disable-next-line
+            txIds: [35, 44, 27, 27, 27, 27, 27, 27, 27, 27, 27, 27, 27, 27, 27, 27, 27, 27, 27, 27, 27, 27, 27, 27, 27, 27, 27, 27, 27, 27, 27, 27, 27, 27, 27, 27, 27, 27, 27, 27, 27, 27, 27, 27, 27, 27, 27, 27, 27, 27, 27, 27],
+            // prettier-ignore
+            // forgefmt: disable-next-line
+            logIdxs: [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+            // https://sepolia.etherscan.io/address/0xa85a7a0c89b41c147ab1ea55e799eceb11fe0674
+            addr: address(0xa85A7a0C89b41C147ab1ea55e799ECeb11fE0674),
+            // https://sepolia.etherscan.io/address/0x8A6cF8A2F64da5b7Dcd9FC3FcF71Cce8fB2B3d7e
+            contractAddress: address(0x8A6cF8A2F64da5b7Dcd9FC3FcF71Cce8fB2B3d7e)
+        });
 
-        _createSelectForkAndSetupAxiom("sepolia", 5_103_063);
+        _createSelectForkAndSetupAxiom("sepolia", input.blockNumbers[MAX_INPUT_LENGTH - 1]);
 
-        input = AxiomInput({ blockNumber: 4_205_938, addr: address(0x8018fe32fCFd3d166E8b4c4E37105318A84BA11b) });
         querySchema = axiomVm.readCircuit("app/axiom/power-user.circuit.ts");
 
         paymaster = new AxiomPaymaster(
-            IEntryPoint(entryPoint), axiomV2QueryAddress, uint64(block.chainid), querySchema, maxRefundPerBlock
+            IEntryPoint(entryPoint), axiomV2QueryAddress, uint64(block.chainid), querySchema, MAX_REFUND_PER_BLOCK
         );
         vm.deal({ account: payable(address(paymaster)), newBalance: 100 ether });
     }
@@ -103,24 +121,34 @@ contract AxiomPaymasterTest is AxiomTest, BaseTest {
         entryPoint.handleOps(packedOps, beneficiaryAddress);
     }
 
-    /// @dev Simple demonstration of testing an Axiom client contract using Axiom cheatcodes
-    // function test_simple_example() public {
-    //     // create a query into Axiom with default parameters
-    //     Query memory q = query(querySchema, abi.encode(input), address(averageBalance));
+    function test_proof_updates_state() public {
+        // create a query into Axiom with default parameters
+        Query memory q = query(querySchema, abi.encode(input), address(paymaster));
 
-    //     // send the query to Axiom
-    //     q.send();
+        // send the query to Axiom
+        q.send();
 
-    //     // prank fulfillment of the query, returning the Axiom results
-    //     bytes32[] memory results = q.prankFulfill();
+        uint256 fulfillBlockNumber = block.number + 1;
 
-    //     // parse Axiom results and verify length is as expected
-    //     assertEq(results.length, 3);
-    //     uint256 blockNumber = uint256(results[0]);
-    //     address addr = address(uint160(uint256(results[1])));
-    //     uint256 avg = uint256(results[2]);
+        // prank fulfillment of the query, returning the Axiom results
+        bytes32[] memory results = q.prankFulfill();
 
-    //     // verify the average balance recorded in AverageBalance is as expected
-    //     assertEq(avg, averageBalance.provenAverageBalances(blockNumber, addr));
-    // }
+        // parse Axiom results and verify length is as expected
+        assertEq(results.length, 4);
+        address addr = address(uint160(uint256(results[0])));
+        address protocolAddress = address(uint160(uint256(results[1])));
+        uint256 blockNumberStart = uint256(results[2]);
+        uint256 blockNumberEnd = uint256(results[3]);
+
+        // verify the refund cutoff is calculated as expected in Paymaster
+        assertEq(fulfillBlockNumber + blockNumberEnd - blockNumberStart, paymaster.refundCutoff(addr, protocolAddress));
+        assertEq(blockNumberEnd, paymaster.lastProvenBlock(addr, protocolAddress));
+
+        // uint256 axiomFee = IAxiomV2QueryExtended(axiomV2QueryAddress).queries(q.id).payment;
+        uint256 axiomFee = 0;
+
+        uint256 newRefund = (blockNumberEnd - blockNumberStart) * MAX_REFUND_PER_BLOCK + axiomFee;
+
+        assertEq(newRefund, paymaster.refundValue(addr, protocolAddress));
+    }
 }
