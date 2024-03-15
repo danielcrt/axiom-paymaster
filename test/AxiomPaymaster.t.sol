@@ -146,7 +146,7 @@ contract AxiomPaymasterTest is AxiomTest, BaseTest {
         uint256 fulfillBlockNumber = block.number;
 
         // parse Axiom results and verify length is as expected
-        // assertEq(results.length, 4);
+        assertEq(results.length, 4);
         address addr = address(uint160(uint256(results[0])));
         address protocolAddress = address(uint160(uint256(results[1])));
         uint256 blockNumberStart = uint256(results[2]);
