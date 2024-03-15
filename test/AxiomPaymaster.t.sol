@@ -5,13 +5,12 @@ import "@axiom-crypto/axiom-std/AxiomTest.sol";
 
 import { PackedUserOperation } from "account-abstraction/contracts/interfaces/PackedUserOperation.sol";
 import { IEntryPoint } from "account-abstraction/contracts/interfaces/IEntryPoint.sol";
-import { AxiomPaymaster } from "../src/AxiomPaymaster.sol";
+import { AxiomPaymaster, IAxiomV2QueryExtended } from "../src/AxiomPaymaster.sol";
 import { EntryPoint } from "../src/EntryPoint.sol";
 import { SimpleProtocol } from "../src/SimpleProtocol.sol";
 import { BaseTest } from "./Base.t.sol";
 import { TestHelpers } from "./TestHelpers.sol";
 import { SimpleAccount } from "account-abstraction/contracts/samples/SimpleAccount.sol";
-import "forge-std/console.sol";
 
 contract AxiomPaymasterTest is AxiomTest, BaseTest {
     using Axiom for Query;
@@ -134,8 +133,17 @@ contract AxiomPaymasterTest is AxiomTest, BaseTest {
     }
 
     function test_proof_updates_state() public {
+        // uint256 axiomFee = 0.001 ether;
+        uint256 axiomFee = 0;
+
         // create a query into Axiom with default parameters
-        Query memory q = query(querySchema, abi.encode(input), address(paymaster));
+        IAxiomV2Query.AxiomV2FeeData memory feeData = IAxiomV2Query.AxiomV2FeeData({
+            maxFeePerGas: 25 gwei,
+            callbackGasLimit: 1_000_000,
+            overrideAxiomQueryFee: axiomFee
+        });
+
+        Query memory q = query(querySchema, abi.encode(input), address(paymaster), "", feeData, msg.sender);
 
         // send the query to Axiom
         q.send();
@@ -156,8 +164,7 @@ contract AxiomPaymasterTest is AxiomTest, BaseTest {
         assertEq(fulfillBlockNumber + blockNumberEnd - blockNumberStart, paymaster.refundCutoff(addr, protocolAddress));
         assertEq(blockNumberEnd, paymaster.lastProvenBlock(addr, protocolAddress));
 
-        // uint256 axiomFee = IAxiomV2QueryExtended(axiomV2QueryAddress).queries(q.id).payment;
-        uint256 axiomFee = 0;
+        // uint256 axiomFeez = IAxiomV2QueryExtended(axiomV2QueryAddress).queries(QUERY_ID).payment;
 
         uint256 newRefund = (blockNumberEnd - blockNumberStart) * MAX_REFUND_PER_BLOCK + axiomFee;
 
