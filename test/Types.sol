@@ -9,6 +9,7 @@ struct User {
 
 struct Users {
     User deployer;
+    User relayer;
     User u1;
     User u2;
 }

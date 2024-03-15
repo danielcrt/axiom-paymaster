@@ -81,6 +81,11 @@ contract AxiomPaymaster is BasePaymaster, AxiomV2Client {
     {
         uint256 preGas = gasleft();
         (address payable userOpSender, address protocolAddress) = abi.decode(context, (address, address));
+        // console.log(protocolAddress);
+        // console.log(userOpSender);
+        // console.log("actualGasCost");
+        // console.log(actualGasCost);
+        // console.log(refundCutoff[userOpSender][protocolAddress]);
         if (
             actualGasCost < refundValue[userOpSender][protocolAddress]
                 && refundCutoff[userOpSender][protocolAddress] > block.number
@@ -89,7 +94,7 @@ contract AxiomPaymaster is BasePaymaster, AxiomV2Client {
             userOpSender.transfer(actualGasCost);
         }
 
-        uint256 consumed = gasleft() - preGas;
+        uint256 consumed = preGas - gasleft();
         console.log("gasleft");
         console.log(consumed);
     }

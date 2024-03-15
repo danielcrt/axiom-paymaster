@@ -16,9 +16,15 @@ abstract contract BaseTest is Test, TestHelpers {
     EntryPoint internal entryPoint;
     UserOperation internal userOp;
     SimpleProtocol internal protocol;
+    uint256 internal opNonce;
 
     function setUp() public virtual {
-        users = Users({ deployer: createUser("Deployer"), u1: createUser("U1"), u2: createUser("U2") });
+        users = Users({
+            deployer: createUser("Deployer"),
+            relayer: createUser("Relayer"),
+            u1: createUser("U1"),
+            u2: createUser("U2")
+        });
         entryPoint = new EntryPoint();
         account = createAccount(users.u1);
         protocol = new SimpleProtocol();
@@ -39,8 +45,6 @@ abstract contract BaseTest is Test, TestHelpers {
             paymasterPostOpGasLimit: 0,
             signature: "0x"
         });
-
-        vm.warp(1_682_899_200);
     }
 
     function createUser(string memory name) internal returns (User memory user) {
@@ -52,5 +56,11 @@ abstract contract BaseTest is Test, TestHelpers {
     function createAccount(User memory accountOwner) internal returns (SimpleAccount) {
         SimpleAccountFactory accountFactory = new SimpleAccountFactory(entryPoint);
         return accountFactory.createAccount(accountOwner.addr, 0);
+    }
+
+    function _useOpNonce() internal returns (uint256) {
+        unchecked {
+            return opNonce++;
+        }
     }
 }
