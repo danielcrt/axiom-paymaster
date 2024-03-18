@@ -13,6 +13,7 @@ import { useSmartAccount } from '@/lib/hooks/useSmartAccount';
 import InteractWithProtocol from '@/components/home/InteractWithProtocol';
 import Decimals from '@/components/ui/Decimals';
 import Tooltip from '@/components/ui/Tooltip';
+import InteractViaEntryPoint from '@/components/home/InteractViaEntryPoint';
 
 export default function Home() {
   const smartAccountAddress = useSmartAccount();
@@ -79,6 +80,7 @@ export default function Home() {
       }
       <ContractInteractions />
       <InteractWithProtocol />
+      <InteractViaEntryPoint />
       {/* <AdvanceStepButton
         label="Generate Proof"
         href={"/prove?" + forwardSearchParams({ connected: address })}

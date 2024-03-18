@@ -18,7 +18,7 @@ abstract contract BaseTest is Test, TestHelpers {
     // https://sepolia.etherscan.io/address/0xd0696B8127FEB08A595e31194dB08D3ee78158fF
     SimpleAccountFactory internal accountFactory = SimpleAccountFactory(0xd0696B8127FEB08A595e31194dB08D3ee78158fF);
     UserOperation internal userOp;
-    SimpleProtocol internal protocol;
+    SimpleProtocol internal protocol = SimpleProtocol(0x8A6cF8A2F64da5b7Dcd9FC3FcF71Cce8fB2B3d7e);
 
     function setUp() public virtual {
         users = Users({
@@ -28,7 +28,6 @@ abstract contract BaseTest is Test, TestHelpers {
             u2: createUser("U2")
         });
         account = createAccount(users.u1);
-        protocol = new SimpleProtocol();
 
         userOp = UserOperation({
             sender: address(0),
@@ -38,7 +37,7 @@ abstract contract BaseTest is Test, TestHelpers {
             callGasLimit: 150_000,
             verificationGasLimit: 150_000, // default verification gas. will add create2 cost (3200+200*length) if initCode exists
             preVerificationGas: 21_000, // should also cover calldata cost.
-            maxFeePerGas: 0,
+            maxFeePerGas: 1 gwei,
             maxPriorityFeePerGas: 1e9,
             paymaster: address(0),
             paymasterData: "0x",

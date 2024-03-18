@@ -30,26 +30,23 @@ contract AxiomPaymasterTest is AxiomTest, BaseTest {
     bytes32 public querySchema;
     AxiomPaymaster public paymaster;
     address payable public beneficiaryAddress;
-    uint256 public constant MAX_REFUND_PER_BLOCK = 21_000;
+    uint256 public constant MAX_REFUND_PER_BLOCK = 10_000 gwei;
+    SimpleAccount validAccount = SimpleAccount(payable(0x7658039b107dBAb91610A9Ad804f33C3E172469e));
 
     function setUp() public override {
-        _createSelectForkAndSetupAxiom("sepolia", 5_496_483);
+        _createSelectForkAndSetupAxiom("sepolia", 5_512_076);
         BaseTest.setUp();
 
         uint64[] memory blockNumbers = new uint64[](MAX_INPUT_LENGTH);
         uint64[] memory txIdxs = new uint64[](MAX_INPUT_LENGTH);
         uint64[] memory logIdxs = new uint64[](MAX_INPUT_LENGTH);
-        blockNumbers[0] = 5_483_082;
-        txIdxs[0] = 35;
+        blockNumbers[0] = 5_512_033;
+        txIdxs[0] = 26;
         logIdxs[0] = 0;
 
-        blockNumbers[1] = 5_483_103;
-        txIdxs[1] = 44;
-        logIdxs[1] = 0;
-
-        for (uint256 i = 2; i < MAX_INPUT_LENGTH; i++) {
-            blockNumbers[i] = 5_484_715;
-            txIdxs[i] = 27;
+        for (uint256 i = 1; i < MAX_INPUT_LENGTH; i++) {
+            blockNumbers[i] = 5_512_371;
+            txIdxs[i] = 109;
             logIdxs[i] = 0;
         }
 
@@ -57,8 +54,8 @@ contract AxiomPaymasterTest is AxiomTest, BaseTest {
             blockNumbers: blockNumbers,
             txIdxs: txIdxs,
             logIdxs: logIdxs,
-            // https://sepolia.etherscan.io/address/0xa85a7a0c89b41c147ab1ea55e799eceb11fe0674
-            addr: address(0xa85A7a0C89b41C147ab1ea55e799ECeb11fE0674),
+            // https://sepolia.etherscan.io/address/0x7658039b107dBAb91610A9Ad804f33C3E172469e
+            addr: address(validAccount),
             // https://sepolia.etherscan.io/address/0x8A6cF8A2F64da5b7Dcd9FC3FcF71Cce8fB2B3d7e
             contractAddress: address(0x8A6cF8A2F64da5b7Dcd9FC3FcF71Cce8fB2B3d7e)
         });
@@ -70,10 +67,13 @@ contract AxiomPaymasterTest is AxiomTest, BaseTest {
         paymaster = new AxiomPaymaster(
             entryPoint, axiomV2QueryAddress, uint64(block.chainid), querySchema, MAX_REFUND_PER_BLOCK
         );
-        vm.deal({ account: payable(address(paymaster)), newBalance: 100 ether });
+
+        // vm.deal({ account: payable(address(paymaster)), newBalance: 100 ether });
+        // Fund entry point for paymaster
+        entryPoint.depositTo{ value: 10 ether }(address(paymaster));
     }
 
-    function test_paymaster_accepts_user_op() public {
+    function test_paymaster_rejects_not_proven_user_op() public {
         vm.startPrank({ msgSender: users.relayer.addr });
 
         uint256 storedValue = 1;
@@ -95,8 +95,26 @@ contract AxiomPaymasterTest is AxiomTest, BaseTest {
         PackedUserOperation[] memory packedOps = new PackedUserOperation[](1);
         packedOps[0] = opPacked;
 
-        vm.expectEmit(true, true, true, true, address(protocol));
-        emit SimpleProtocol.StoreInput(address(account), storedValue);
+        // bytes32 userOpHash = getUserOpHash(userOp, address(entryPoint), block.chainid);
+        // // User has not submitted a proof so post op should revert
+        // vm.expectEmit(true, true, true, true, address(entryPoint));
+        // emit IEntryPoint.PostOpRevertReason(
+        //     userOpHash,
+        //     userOp.sender,
+        //     userOp.nonce,
+        //     abi.encodeWithSelector(
+        //         IEntryPoint.PostOpReverted.selector, abi.encodePacked(AxiomPaymaster.NotEligible.selector)
+        //     )
+        // );
+
+        vm.expectRevert(
+            abi.encodeWithSelector(
+                IEntryPoint.FailedOpWithRevert.selector,
+                0,
+                "AA33 reverted",
+                abi.encodePacked(AxiomPaymaster.NotEligible.selector)
+            )
+        );
 
         entryPoint.handleOps(packedOps, beneficiaryAddress);
     }
@@ -107,7 +125,8 @@ contract AxiomPaymasterTest is AxiomTest, BaseTest {
         uint128 paymasterPostOpGasLimit = paymaster.REFUND_POST_OP_COST();
 
         bytes memory storeCallData = abi.encodeWithSelector(SimpleProtocol.store.selector, 1);
-        bytes memory callData = abi.encodeWithSelector(SimpleAccount.execute.selector, 0, storeCallData);
+        bytes memory callData =
+            abi.encodeWithSelector(SimpleAccount.execute.selector, address(protocol), 0, storeCallData);
 
         userOp.nonce = account.getNonce();
         userOp.sender = address(account);
@@ -161,6 +180,9 @@ contract AxiomPaymasterTest is AxiomTest, BaseTest {
         uint256 blockNumberStart = uint256(results[2]);
         uint256 blockNumberEnd = uint256(results[3]);
 
+        assertEq(addr, address(validAccount));
+        assertEq(protocolAddress, address(protocol));
+
         // verify the refund cutoff is calculated as expected in Paymaster
         assertEq(fulfillBlockNumber + blockNumberEnd - blockNumberStart, paymaster.refundCutoff(addr, protocolAddress));
         assertEq(blockNumberEnd, paymaster.lastProvenBlock(addr, protocolAddress));
@@ -172,31 +194,34 @@ contract AxiomPaymasterTest is AxiomTest, BaseTest {
         assertEq(newRefund, paymaster.refundValue(addr, protocolAddress));
 
         // Verify if user is refunded now
-        // bytes memory storeCallData = abi.encodeWithSelector(SimpleProtocol.store.selector, 1);
-        // bytes memory callData = abi.encodeWithSelector(SimpleAccount.execute.selector, 0, storeCallData);
+        uint256 storedValue = 2;
+        bytes memory storeCallData = abi.encodeWithSelector(SimpleProtocol.store.selector, storedValue);
+        bytes memory callData =
+            abi.encodeWithSelector(SimpleAccount.execute.selector, address(protocol), 0, storeCallData);
 
-        // userOp.nonce = account.getNonce();
-        // userOp.sender = address(account);
-        // userOp.paymaster = address(paymaster);
-        // userOp.paymasterVerificationGasLimit = 3e5;
-        // userOp.paymasterPostOpGasLimit = paymaster.REFUND_POST_OP_COST();
-        // userOp.callData = callData;
+        userOp.nonce = validAccount.getNonce();
+        userOp.sender = address(validAccount);
+        userOp.paymaster = address(paymaster);
+        userOp.paymasterVerificationGasLimit = 3e5;
+        userOp.paymasterPostOpGasLimit = paymaster.REFUND_POST_OP_COST();
+        userOp.callData = callData;
 
-        // userOp = signUserOp(userOp, users.u1, address(entryPoint), block.chainid);
+        userOp = signUserOp(userOp, users.u1, address(entryPoint), block.chainid);
 
-        // PackedUserOperation memory opPacked = packUserOp(userOp);
-        // PackedUserOperation[] memory packedOps = new PackedUserOperation[](1);
-        // packedOps[0] = opPacked;
+        PackedUserOperation memory opPacked = packUserOp(userOp);
+        PackedUserOperation[] memory packedOps = new PackedUserOperation[](1);
+        packedOps[0] = opPacked;
 
-        // uint256 balanceBefore = address(account).balance;
-        // uint256 refundValueBefore = paymaster.refundValue(addr, protocolAddress);
+        uint256 refundValueBefore = paymaster.refundValue(addr, protocolAddress);
 
-        // vm.startPrank({ msgSender: users.relayer.addr });
-        // entryPoint.handleOps(packedOps, beneficiaryAddress);
-        // uint256 balanceAfter = address(account).balance;
-        // uint256 refundValueAfter = paymaster.refundValue(addr, protocolAddress);
+        vm.startPrank({ msgSender: users.relayer.addr });
 
-        // assertEq(balanceAfter, balanceBefore);
-        // assertLt(refundValueAfter, refundValueBefore);
+        vm.expectEmit(true, true, true, true, address(protocol));
+        emit SimpleProtocol.StoreInput(address(validAccount), storedValue);
+
+        entryPoint.handleOps(packedOps, beneficiaryAddress);
+        uint256 refundValueAfter = paymaster.refundValue(addr, protocolAddress);
+
+        assertLt(refundValueAfter, refundValueBefore);
     }
 }

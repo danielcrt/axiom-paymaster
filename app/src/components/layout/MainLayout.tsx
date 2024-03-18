@@ -1,3 +1,4 @@
+import TopBar from "../ui/TopBar"
 import Footer from "./Footer"
 
 export default function MainLayout({
@@ -7,6 +8,7 @@ export default function MainLayout({
 }) {
   return (
     <div className="flex flex-col w-screen min-h-screen justify-between items-center">
+      <TopBar />
       <div className="flex flex-grow w-full justify-center items-center">
         <div className="flex flex-col w-full h-full justify-center items-center gap-4">
           {children}

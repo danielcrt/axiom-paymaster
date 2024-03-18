@@ -9,7 +9,7 @@ import "@openzeppelin/contracts/utils/cryptography/ECDSA.sol";
 import "@openzeppelin/contracts/utils/cryptography/MessageHashUtils.sol";
 import { AxiomV2Client } from "@axiom-crypto/v2-periphery/client/AxiomV2Client.sol";
 import { IAxiomV2Query } from "@axiom-crypto/v2-periphery/interfaces/query/IAxiomV2Query.sol";
-import "forge-std/console.sol";
+import { console } from "forge-std/console.sol";
 
 interface IAxiomV2QueryExtended {
     function queries(uint256 queryId) external returns (IAxiomV2Query.AxiomQueryMetadata memory);
@@ -48,8 +48,11 @@ contract AxiomPaymaster is BasePaymaster, AxiomV2Client {
     /// @param refundValue The amount of gas that the user is eligible for the submitted proof
     event UsageProved(address indexed user, address indexed protocol, uint256 refundValue);
 
-    /// Error returned when gas limit set for the post operation is too low
+    /// @notice Thrown when gas limit set for the post operation is too low
     error PostOpGasLimitTooLow();
+
+    /// @notice Thrown when user is not eligible for gas refund
+    error NotEligible();
 
     /// @notice Construct a new AverageBalance contract.
     /// @param  _axiomV2QueryAddress The address of the AxiomV2Query contract.
@@ -69,14 +72,27 @@ contract AxiomPaymaster is BasePaymaster, AxiomV2Client {
     function _validatePaymasterUserOp(
         PackedUserOperation calldata userOp,
         bytes32, /*userOpHash*/
-        uint256 /*requiredPreFund*/
+        uint256 requiredPreFund
     ) internal view override returns (bytes memory context, uint256 validationResult) {
         if (REFUND_POST_OP_COST > userOp.unpackPostOpGasLimit()) {
             revert PostOpGasLimitTooLow();
         }
+
         (address protocolAddress) =
             abi.decode(userOp.callData[CALLDATA_ADDRESS_OFFSET:CALLDATA_VALUE_OFFSET], (address));
+
+        console.log(requiredPreFund);
+        console.log(refundValue[userOp.sender][protocolAddress]);
+
+        if (
+            requiredPreFund > refundValue[userOp.sender][protocolAddress]
+                || refundCutoff[userOp.sender][protocolAddress] < block.number
+        ) {
+            revert NotEligible();
+        }
+
         context = abi.encode(userOp.sender, protocolAddress);
+
         validationResult = Helpers._packValidationData(false, 0, 0);
     }
 
@@ -91,24 +107,16 @@ contract AxiomPaymaster is BasePaymaster, AxiomV2Client {
         internal
         override
     {
-        uint256 preGas = gasleft();
         (address payable userOpSender, address protocolAddress) = abi.decode(context, (address, address));
-        // console.log(protocolAddress);
-        // console.log(userOpSender);
-        // console.log("actualGasCost");
-        // console.log(actualGasCost);
-        // console.log(refundCutoff[userOpSender][protocolAddress]);
+
         if (
-            actualGasCost < refundValue[userOpSender][protocolAddress]
-                && refundCutoff[userOpSender][protocolAddress] > block.number
+            actualGasCost > refundValue[userOpSender][protocolAddress]
+                || refundCutoff[userOpSender][protocolAddress] < block.number
         ) {
-            refundValue[userOpSender][protocolAddress] -= actualGasCost;
-            userOpSender.transfer(actualGasCost);
+            revert NotEligible();
         }
 
-        uint256 consumed = preGas - gasleft();
-        console.log("gasleft");
-        console.log(consumed);
+        refundValue[userOpSender][protocolAddress] -= actualGasCost;
     }
 
     /// @inheritdoc AxiomV2Client
