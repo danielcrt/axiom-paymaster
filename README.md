@@ -74,3 +74,24 @@ Install [Foundry](https://book.getfoundry.sh/getting-started/installation). The 
 curl -L https://foundry.paradigm.xyz | bash
 foundryup
 ```
+
+
+## Deploy
+
+To deploy, run the following command substituting `RPC_URL` and `ENTRY_POINT_ADDRESS`
+
+Consider using `--priority-gas-price` to set a lower than maximum priority gas price E.g. `--priority-gas-price 10000`
+
+### EntryPoint
+
+```
+forge script script/DeployEntryPoint.s.sol --fork-url <RPC_URL> --broadcast
+```
+
+### AccountFactory
+
+```
+forge script script/DeployAccountFactory.s.sol <ENTRY_POINT_ADDRESS> --sig "run(address)" --fork-url <RPC_URL> --broadcast
+```
+
+If you are deploying to your local node, you must first start the node by running `anvil` in a separate terminal window

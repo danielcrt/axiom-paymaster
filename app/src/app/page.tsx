@@ -1,19 +1,42 @@
 "use client";
 
 import Title from '@/components/ui/Title'
-import { forwardSearchParams } from '@/lib/utils'
-import AdvanceStepButton from '@/components/ui/AdvanceStepButton';
+import { isContract, shortenAddress } from '@/lib/utils'
 import CodeBox from '@/components/ui/CodeBox';
-import { useAccount } from 'wagmi';
+import { useBalance, useBytecode } from 'wagmi';
+import { Constants } from '@/shared/constants';
+import CreateAccount from '@/components/home/CreateAccount';
+import Link from 'next/link';
+import { formatEther, isAddress } from 'viem';
+import ContractInteractions from '@/components/home/ContractInteractions';
+import { useSmartAccount } from '@/lib/hooks/useSmartAccount';
+import InteractWithProtocol from '@/components/home/InteractWithProtocol';
+import Decimals from '@/components/ui/Decimals';
+import Tooltip from '@/components/ui/Tooltip';
 
 export default function Home() {
-  const { address } = useAccount();
+  const smartAccountAddress = useSmartAccount();
+
+  const { data: bytecode } = useBytecode({
+    chainId: Constants.CHAIN_ID_SEPOLIA,
+    address: smartAccountAddress as `0x${string}`,
+    query: {
+      enabled: smartAccountAddress !== undefined && isAddress(smartAccountAddress)
+    }
+  })
+
+  const { data: balance } = useBalance({
+    address: smartAccountAddress as `0x${string}`,
+    query: {
+      enabled: smartAccountAddress !== undefined && isAddress(smartAccountAddress) && isContract(bytecode)
+    }
+  })
 
   let compiledCircuit;
   try {
     compiledCircuit = require("../../axiom/data/compiled.json");
   } catch (e) {
-    console.log(e);
+    console.info(e);
   }
   if (compiledCircuit === undefined) {
     return (
@@ -22,7 +45,7 @@ export default function Home() {
           Compile circuit first by running in the root directory of this project:
         </div>
         <CodeBox>
-          {"npx axiom compile circuit app/axiom/average.circuit.ts"}
+          {"npx axiom compile circuit app/axiom/power-user.circuit.ts"}
         </CodeBox>
       </>
     )
@@ -31,15 +54,35 @@ export default function Home() {
   return (
     <>
       <Title>
-        Average Balance Proof
+        Power User Proof
       </Title>
-      <div className="text-center">
-        Access your average ETH balance over 8 evenly spaced blocks in the last 24 hours.
-      </div>
-      <AdvanceStepButton
+      {isContract(bytecode) ?
+        <div>
+          <p>Your Smart account:&nbsp;
+            <Tooltip text={smartAccountAddress}>
+              <Link href={`${Constants.ETHERSCAN_BASE_URL}address/${smartAccountAddress}`} target="_blank">
+                {shortenAddress(smartAccountAddress ?? '')}
+              </Link>
+            </Tooltip>
+          </p>
+          <p>
+            Balance:&nbsp;<Decimals>
+              {formatEther(BigInt(balance?.value ?? 0)).toString()}
+            </Decimals>
+            {" ETH"}
+          </p>
+        </div> :
+        <div className=''>
+          <CreateAccount
+            accountAddress={smartAccountAddress ?? ''} />
+        </div>
+      }
+      <ContractInteractions />
+      <InteractWithProtocol />
+      {/* <AdvanceStepButton
         label="Generate Proof"
         href={"/prove?" + forwardSearchParams({ connected: address })}
-      />
+      /> */}
     </>
   )
 }

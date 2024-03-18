@@ -6,11 +6,12 @@ import "@axiom-crypto/axiom-std/AxiomTest.sol";
 import { PackedUserOperation } from "account-abstraction/contracts/interfaces/PackedUserOperation.sol";
 import { IEntryPoint } from "account-abstraction/contracts/interfaces/IEntryPoint.sol";
 import { AxiomPaymaster, IAxiomV2QueryExtended } from "../src/AxiomPaymaster.sol";
-import { EntryPoint } from "../src/EntryPoint.sol";
+import { EntryPoint } from "account-abstraction/contracts/core/EntryPoint.sol";
 import { SimpleProtocol } from "../src/SimpleProtocol.sol";
 import { BaseTest } from "./Base.t.sol";
 import { TestHelpers } from "./TestHelpers.sol";
 import { SimpleAccount } from "account-abstraction/contracts/samples/SimpleAccount.sol";
+import { console } from "forge-std/console.sol";
 
 contract AxiomPaymasterTest is AxiomTest, BaseTest {
     using Axiom for Query;
@@ -32,7 +33,7 @@ contract AxiomPaymasterTest is AxiomTest, BaseTest {
     uint256 public constant MAX_REFUND_PER_BLOCK = 21_000;
 
     function setUp() public override {
-        _createSelectForkAndSetupAxiom("sepolia", 5_484_716);
+        _createSelectForkAndSetupAxiom("sepolia", 5_496_483);
         BaseTest.setUp();
 
         uint64[] memory blockNumbers = new uint64[](MAX_INPUT_LENGTH);
@@ -67,68 +68,9 @@ contract AxiomPaymasterTest is AxiomTest, BaseTest {
         querySchema = axiomVm.readCircuit("app/axiom/power-user.circuit.ts");
 
         paymaster = new AxiomPaymaster(
-            IEntryPoint(entryPoint), axiomV2QueryAddress, uint64(block.chainid), querySchema, MAX_REFUND_PER_BLOCK
+            entryPoint, axiomV2QueryAddress, uint64(block.chainid), querySchema, MAX_REFUND_PER_BLOCK
         );
         vm.deal({ account: payable(address(paymaster)), newBalance: 100 ether });
-
-        // vm.startPrank({ msgSender: users.relayer.addr });
-
-        // uint128 paymasterPostOpGasLimit = paymaster.REFUND_POST_OP_COST();
-
-        // uint256 storedValue = 1;
-
-        // bytes memory storeCallData = abi.encodeWithSelector(SimpleProtocol.store.selector, storedValue);
-        // bytes memory callData =
-        //     abi.encodeWithSelector(SimpleAccount.execute.selector, address(protocol), 0, storeCallData);
-
-        // userOp.nonce = opNonce;
-        // opNonce += 1;
-        // userOp.sender = address(account);
-        // userOp.paymaster = address(paymaster);
-        // userOp.paymasterVerificationGasLimit = 3e5;
-        // userOp.paymasterPostOpGasLimit = paymasterPostOpGasLimit;
-        // userOp.callData = callData;
-
-        // userOp = signUserOp(userOp, users.u1, address(entryPoint), block.chainid);
-
-        // PackedUserOperation memory opPacked = packUserOp(userOp);
-        // PackedUserOperation[] memory packedOps = new PackedUserOperation[](1);
-        // packedOps[0] = opPacked;
-
-        // vm.roll(5_483_082);
-        // entryPoint.handleOps(packedOps, beneficiaryAddress);
-
-        // userOp.nonce = opNonce;
-        // opNonce += 1;
-        // userOp.sender = address(account);
-        // userOp.paymaster = address(paymaster);
-        // userOp.paymasterVerificationGasLimit = 3e5;
-        // userOp.paymasterPostOpGasLimit = paymasterPostOpGasLimit;
-        // userOp.callData = callData;
-
-        // userOp = signUserOp(userOp, users.u1, address(entryPoint), block.chainid);
-
-        // opPacked = packUserOp(userOp);
-        // packedOps[0] = opPacked;
-
-        // vm.roll(5_483_103);
-        // entryPoint.handleOps(packedOps, beneficiaryAddress);
-
-        // userOp.nonce = opNonce;
-        // opNonce += 1;
-        // userOp.sender = address(account);
-        // userOp.paymaster = address(paymaster);
-        // userOp.paymasterVerificationGasLimit = 3e5;
-        // userOp.paymasterPostOpGasLimit = paymasterPostOpGasLimit;
-        // userOp.callData = callData;
-
-        // userOp = signUserOp(userOp, users.u1, address(entryPoint), block.chainid);
-
-        // opPacked = packUserOp(userOp);
-        // packedOps[0] = opPacked;
-
-        // vm.roll(5_484_715);
-        // entryPoint.handleOps(packedOps, beneficiaryAddress);
     }
 
     function test_paymaster_accepts_user_op() public {
@@ -140,7 +82,7 @@ contract AxiomPaymasterTest is AxiomTest, BaseTest {
         bytes memory callData =
             abi.encodeWithSelector(SimpleAccount.execute.selector, address(protocol), 0, storeCallData);
 
-        userOp.nonce = _useOpNonce();
+        userOp.nonce = account.getNonce();
         userOp.sender = address(account);
         userOp.paymaster = address(paymaster);
         userOp.paymasterVerificationGasLimit = 3e5;
@@ -167,7 +109,7 @@ contract AxiomPaymasterTest is AxiomTest, BaseTest {
         bytes memory storeCallData = abi.encodeWithSelector(SimpleProtocol.store.selector, 1);
         bytes memory callData = abi.encodeWithSelector(SimpleAccount.execute.selector, 0, storeCallData);
 
-        userOp.nonce = _useOpNonce();
+        userOp.nonce = account.getNonce();
         userOp.sender = address(account);
         userOp.paymaster = address(paymaster);
         userOp.paymasterVerificationGasLimit = 3e5;
@@ -233,7 +175,7 @@ contract AxiomPaymasterTest is AxiomTest, BaseTest {
         // bytes memory storeCallData = abi.encodeWithSelector(SimpleProtocol.store.selector, 1);
         // bytes memory callData = abi.encodeWithSelector(SimpleAccount.execute.selector, 0, storeCallData);
 
-        // userOp.nonce = _useOpNonce();
+        // userOp.nonce = account.getNonce();
         // userOp.sender = address(account);
         // userOp.paymaster = address(paymaster);
         // userOp.paymasterVerificationGasLimit = 3e5;

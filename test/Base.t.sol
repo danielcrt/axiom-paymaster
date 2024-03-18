@@ -6,17 +6,19 @@ import { Test } from "forge-std/Test.sol";
 import { User, Users, UserOperation } from "./Types.sol";
 import { SimpleAccount } from "account-abstraction/contracts/samples/SimpleAccount.sol";
 import { SimpleAccountFactory } from "account-abstraction/contracts/samples/SimpleAccountFactory.sol";
-import { EntryPoint } from "account-abstraction/contracts/core/EntryPoint.sol";
+import { IEntryPoint } from "account-abstraction/contracts/interfaces/IEntryPoint.sol";
 import { TestHelpers } from "./TestHelpers.sol";
 import { SimpleProtocol } from "../src/SimpleProtocol.sol";
 
 abstract contract BaseTest is Test, TestHelpers {
     Users internal users;
     SimpleAccount internal account;
-    EntryPoint internal entryPoint;
+    // https://sepolia.etherscan.io/address/0x7694f355fBca907e87FeB88a584363465dc66D8A
+    IEntryPoint internal entryPoint = IEntryPoint(0x7694f355fBca907e87FeB88a584363465dc66D8A);
+    // https://sepolia.etherscan.io/address/0xd0696B8127FEB08A595e31194dB08D3ee78158fF
+    SimpleAccountFactory internal accountFactory = SimpleAccountFactory(0xd0696B8127FEB08A595e31194dB08D3ee78158fF);
     UserOperation internal userOp;
     SimpleProtocol internal protocol;
-    uint256 internal opNonce;
 
     function setUp() public virtual {
         users = Users({
@@ -25,7 +27,6 @@ abstract contract BaseTest is Test, TestHelpers {
             u1: createUser("U1"),
             u2: createUser("U2")
         });
-        entryPoint = new EntryPoint();
         account = createAccount(users.u1);
         protocol = new SimpleProtocol();
 
@@ -54,13 +55,6 @@ abstract contract BaseTest is Test, TestHelpers {
     }
 
     function createAccount(User memory accountOwner) internal returns (SimpleAccount) {
-        SimpleAccountFactory accountFactory = new SimpleAccountFactory(entryPoint);
         return accountFactory.createAccount(accountOwner.addr, 0);
-    }
-
-    function _useOpNonce() internal returns (uint256) {
-        unchecked {
-            return opNonce++;
-        }
     }
 }

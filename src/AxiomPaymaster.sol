@@ -15,6 +15,13 @@ interface IAxiomV2QueryExtended {
     function queries(uint256 queryId) external returns (IAxiomV2Query.AxiomQueryMetadata memory);
 }
 
+/**
+ * TODO
+ * Must restrict the protocolAddresses allowed to be passed.
+ * Otherwise users can drain the paymaster for their own protocol.
+ * Can take a generalized approach where each protocol funds the paymaster
+ * and paymaster releases refunds only from the protocol's balance
+ */
 contract AxiomPaymaster is BasePaymaster, AxiomV2Client {
     using UserOperationLib for PackedUserOperation;
 
@@ -33,10 +40,15 @@ contract AxiomPaymaster is BasePaymaster, AxiomV2Client {
     mapping(address => mapping(address => uint256)) public lastProvenBlock;
     mapping(address => mapping(address => uint256)) public refundCutoff;
 
+    /// @notice Max amount of ETH protocol offers as gas refund per block
     uint256 public maxRefundPerBlock;
 
+    /// @param user Address of the user for which the proof was submitted
+    /// @param protocol The address of the protocol's contract that user interacted with
+    /// @param refundValue The amount of gas that the user is eligible for the submitted proof
     event UsageProved(address indexed user, address indexed protocol, uint256 refundValue);
 
+    /// Error returned when gas limit set for the post operation is too low
     error PostOpGasLimitTooLow();
 
     /// @notice Construct a new AverageBalance contract.
