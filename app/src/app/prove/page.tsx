@@ -129,7 +129,7 @@ export default async function Prove() {
   useEffect(() => {
     fetchValidInputs();
   }, [fetchValidInputs]);
-console.log(inputs)
+
   return (
     <>
       <Title>
