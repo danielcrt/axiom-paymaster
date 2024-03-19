@@ -1,5 +1,13 @@
 import { PackedUserOperation, UserOperation } from "@/shared/types";
-import { BigNumberish, AbiCoder, keccak256, ZeroAddress, ethers, toBeHex, zeroPadValue } from "ethers";
+import {
+  BigNumberish,
+  AbiCoder,
+  keccak256,
+  ZeroAddress,
+  ethers,
+  toBeHex,
+  zeroPadValue,
+} from "ethers";
 
 const truncateRegex = /^(0x[a-zA-Z0-9]{4})[a-zA-Z0-9]+([a-zA-Z0-9]{4})$/;
 
@@ -69,13 +77,23 @@ export const shortenString = (text: string, maxChars: number = 12): string => {
   return text.length > maxChars ? text.substring(0, maxChars) + "..." : text;
 };
 
-
 export const packUserOp = (userOp: UserOperation): PackedUserOperation => {
-  const accountGasLimits = packAccountGasLimits(userOp.verificationGasLimit, userOp.callGasLimit)
-  const gasFees = packAccountGasLimits(userOp.maxPriorityFeePerGas, userOp.maxFeePerGas)
-  let paymasterAndData = '0x'
-  if (userOp.paymaster?.length >= 20 && userOp.paymaster !== ZeroAddress) {
-    paymasterAndData = packPaymasterData(userOp.paymaster as string, userOp.paymasterVerificationGasLimit, userOp.paymasterPostOpGasLimit, userOp.paymasterData as string)
+  const accountGasLimits = packAccountGasLimits(
+    userOp.verificationGasLimit,
+    userOp.callGasLimit
+  );
+  const gasFees = packAccountGasLimits(
+    userOp.maxPriorityFeePerGas,
+    userOp.maxFeePerGas
+  );
+  let paymasterAndData = "0x";
+  if (userOp.paymaster.length >= 20 && userOp.paymaster !== ZeroAddress) {
+    paymasterAndData = packPaymasterData(
+      userOp.paymaster as string,
+      userOp.paymasterVerificationGasLimit,
+      userOp.paymasterPostOpGasLimit,
+      userOp.paymasterData as string
+    );
   }
   return {
     sender: userOp.sender,
@@ -86,22 +104,33 @@ export const packUserOp = (userOp: UserOperation): PackedUserOperation => {
     preVerificationGas: userOp.preVerificationGas,
     gasFees,
     paymasterAndData,
-    signature: userOp.signature
-  }
-}
+    signature: userOp.signature,
+  };
+};
 
-export const packAccountGasLimits = (verificationGasLimit: BigNumberish, callGasLimit: BigNumberish): string => {
+export const packAccountGasLimits = (
+  verificationGasLimit: BigNumberish,
+  callGasLimit: BigNumberish
+): string => {
   return ethers.concat([
-    zeroPadValue(toBeHex(verificationGasLimit), 16), zeroPadValue(toBeHex(callGasLimit), 16)
-  ])
-}
+    zeroPadValue(toBeHex(verificationGasLimit), 16),
+    zeroPadValue(toBeHex(callGasLimit), 16),
+  ]);
+};
 
-export const packPaymasterData = (paymaster: string, paymasterVerificationGasLimit: BigNumberish, postOpGasLimit: BigNumberish, paymasterData: string): string =>{
+export const packPaymasterData = (
+  paymaster: string,
+  paymasterVerificationGasLimit: BigNumberish,
+  postOpGasLimit: BigNumberish,
+  paymasterData: string
+): string => {
   return ethers.concat([
-    paymaster, zeroPadValue(toBeHex(paymasterVerificationGasLimit ), 16),
-    zeroPadValue(toBeHex(postOpGasLimit), 16), paymasterData
-  ])
-}
+    paymaster,
+    zeroPadValue(toBeHex(paymasterVerificationGasLimit), 16),
+    zeroPadValue(toBeHex(postOpGasLimit), 16),
+    paymasterData,
+  ]);
+};
 
 export function encodeUserOp(
   userOp: UserOperation,
@@ -172,3 +201,7 @@ export function getUserOpHash(
   );
   return keccak256(enc);
 }
+
+export const padArray = (arr: any[], len: number, fill: any) => {
+  return arr.concat(Array(len).fill(fill)).slice(0, len);
+};

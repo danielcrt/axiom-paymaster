@@ -9,19 +9,11 @@ import "@openzeppelin/contracts/utils/cryptography/ECDSA.sol";
 import "@openzeppelin/contracts/utils/cryptography/MessageHashUtils.sol";
 import { AxiomV2Client } from "@axiom-crypto/v2-periphery/client/AxiomV2Client.sol";
 import { IAxiomV2Query } from "@axiom-crypto/v2-periphery/interfaces/query/IAxiomV2Query.sol";
-import { console } from "forge-std/console.sol";
 
 interface IAxiomV2QueryExtended {
     function queries(uint256 queryId) external returns (IAxiomV2Query.AxiomQueryMetadata memory);
 }
 
-/**
- * TODO
- * Must restrict the protocolAddresses allowed to be passed.
- * Otherwise users can drain the paymaster for their own protocol.
- * Can take a generalized approach where each protocol funds the paymaster
- * and paymaster releases refunds only from the protocol's balance
- */
 contract AxiomPaymaster is BasePaymaster, AxiomV2Client {
     using UserOperationLib for PackedUserOperation;
 
@@ -54,6 +46,9 @@ contract AxiomPaymaster is BasePaymaster, AxiomV2Client {
     /// @notice Thrown when user is not eligible for gas refund
     error NotEligible();
 
+    /// @notice Thrown when user tries to prove something older than his last claim
+    error AlreadyProven();
+
     /// @notice Construct a new AverageBalance contract.
     /// @param  _axiomV2QueryAddress The address of the AxiomV2Query contract.
     /// @param  _callbackSourceChainId The ID of the chain the query reads from.
@@ -72,7 +67,7 @@ contract AxiomPaymaster is BasePaymaster, AxiomV2Client {
     function _validatePaymasterUserOp(
         PackedUserOperation calldata userOp,
         bytes32, /*userOpHash*/
-        uint256 requiredPreFund
+        uint256 /*requiredPreFund*/
     ) internal view override returns (bytes memory context, uint256 validationResult) {
         if (REFUND_POST_OP_COST > userOp.unpackPostOpGasLimit()) {
             revert PostOpGasLimitTooLow();
@@ -81,11 +76,10 @@ contract AxiomPaymaster is BasePaymaster, AxiomV2Client {
         (address protocolAddress) =
             abi.decode(userOp.callData[CALLDATA_ADDRESS_OFFSET:CALLDATA_VALUE_OFFSET], (address));
 
-        console.log(requiredPreFund);
-        console.log(refundValue[userOp.sender][protocolAddress]);
+        uint256 maxGasCost = userOp.gasPrice() * userOp.unpackCallGasLimit();
 
         if (
-            requiredPreFund > refundValue[userOp.sender][protocolAddress]
+            maxGasCost > refundValue[userOp.sender][protocolAddress]
                 || refundCutoff[userOp.sender][protocolAddress] < block.number
         ) {
             revert NotEligible();
@@ -108,13 +102,6 @@ contract AxiomPaymaster is BasePaymaster, AxiomV2Client {
         override
     {
         (address payable userOpSender, address protocolAddress) = abi.decode(context, (address, address));
-
-        if (
-            actualGasCost > refundValue[userOpSender][protocolAddress]
-                || refundCutoff[userOpSender][protocolAddress] < block.number
-        ) {
-            revert NotEligible();
-        }
 
         refundValue[userOpSender][protocolAddress] -= actualGasCost;
     }
@@ -147,10 +134,11 @@ contract AxiomPaymaster is BasePaymaster, AxiomV2Client {
         uint256 blockNumberStart = uint256(axiomResults[2]);
         uint256 blockNumberEnd = uint256(axiomResults[3]);
 
-        require(blockNumberStart > lastProvenBlock[addr][protocolAddress], "Cannot prove before last proved");
+        if (blockNumberStart <= lastProvenBlock[addr][protocolAddress]) {
+            revert AlreadyProven();
+        }
 
         uint256 axiomFee = IAxiomV2QueryExtended(axiomV2QueryAddress).queries(queryId).payment;
-
         uint256 newRefund = (blockNumberEnd - blockNumberStart) * maxRefundPerBlock + axiomFee;
 
         refundValue[addr][protocolAddress] += newRefund;
@@ -159,6 +147,7 @@ contract AxiomPaymaster is BasePaymaster, AxiomV2Client {
         if (newCutoff > refundCutoff[addr][protocolAddress]) {
             refundCutoff[addr][protocolAddress] = newCutoff;
         }
+
         lastProvenBlock[addr][protocolAddress] = blockNumberEnd;
 
         emit UsageProved(addr, protocolAddress, newRefund);

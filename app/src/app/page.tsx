@@ -3,7 +3,7 @@
 import Title from '@/components/ui/Title'
 import { isContract, shortenAddress } from '@/lib/utils'
 import CodeBox from '@/components/ui/CodeBox';
-import { useBalance, useBytecode } from 'wagmi';
+import { Config, useBalance, useBlock, useBytecode, useReadContract } from 'wagmi';
 import { Constants } from '@/shared/constants';
 import CreateAccount from '@/components/home/CreateAccount';
 import Link from 'next/link';
@@ -14,6 +14,9 @@ import InteractWithProtocol from '@/components/home/InteractWithProtocol';
 import Decimals from '@/components/ui/Decimals';
 import Tooltip from '@/components/ui/Tooltip';
 import InteractViaEntryPoint from '@/components/home/InteractViaEntryPoint';
+import EntryPointAbi from '@/lib/abi/EntryPoint.json';
+import AxiomPaymasterAbi from '@/lib/abi/AxiomPaymaster.json';
+import { format } from 'date-fns';
 
 export default function Home() {
   const smartAccountAddress = useSmartAccount();
@@ -27,11 +30,59 @@ export default function Home() {
   })
 
   const { data: balance } = useBalance({
-    address: smartAccountAddress as `0x${string}`,
+    address: Constants.PAYMASTER_ADDRESS as `0x${string}`,
     query: {
       enabled: smartAccountAddress !== undefined && isAddress(smartAccountAddress) && isContract(bytecode)
     }
   })
+
+  const { data: paymasterBalance } = useReadContract<
+    typeof EntryPointAbi,
+    "balanceOf",
+    [string],
+    Config,
+    bigint
+  >({
+    chainId: Constants.CHAIN_ID_SEPOLIA,
+    address: Constants.ENTRY_POINT_ADDRESS as `0x${string}`,
+    abi: EntryPointAbi,
+    functionName: "balanceOf",
+    args: [Constants.PAYMASTER_ADDRESS],
+  });
+
+  const { data: refundCutoff } = useReadContract<
+    typeof AxiomPaymasterAbi,
+    "refundCutoff",
+    [string, string],
+    Config,
+    bigint
+  >({
+    chainId: Constants.CHAIN_ID_SEPOLIA,
+    address: Constants.PAYMASTER_ADDRESS as `0x${string}`,
+    abi: AxiomPaymasterAbi,
+    functionName: "refundCutoff",
+    args: [smartAccountAddress, Constants.PROTOCOL_ADDRESS],
+    query: {
+      enabled: smartAccountAddress !== undefined && isAddress(smartAccountAddress) && isContract(bytecode)
+    }
+  });
+
+  const { data: refundValue } = useReadContract<
+    typeof AxiomPaymasterAbi,
+    "refundValue",
+    [string, string],
+    Config,
+    bigint
+  >({
+    chainId: Constants.CHAIN_ID_SEPOLIA,
+    address: Constants.PAYMASTER_ADDRESS as `0x${string}`,
+    abi: AxiomPaymasterAbi,
+    functionName: "refundValue",
+    args: [smartAccountAddress, Constants.PROTOCOL_ADDRESS],
+    query: {
+      enabled: smartAccountAddress !== undefined && isAddress(smartAccountAddress) && isContract(bytecode)
+    }
+  });
 
   let compiledCircuit;
   try {
@@ -67,20 +118,42 @@ export default function Home() {
             </Tooltip>
           </p>
           <p>
-            Balance:&nbsp;<Decimals>
-              {formatEther(BigInt(balance?.value ?? 0)).toString()}
+            Paymaster balance:&nbsp;<Decimals decimals={6}>
+              {formatEther(BigInt(paymasterBalance ?? 0)).toString()}
             </Decimals>
             {" ETH"}
           </p>
+          {refundCutoff !== undefined &&
+            <>
+              {refundCutoff === BigInt(0) ?
+                <p>Not eligible for refund</p> :
+                <p>
+                  Refund cutoff (block number): {Number(refundCutoff)}
+                </p>
+              }
+            </>
+          }
+          {refundValue !== undefined &&
+            <p>
+              Refund value:&nbsp;<Decimals decimals={6}>
+                {formatEther(BigInt(refundValue ?? 0)).toString()}
+              </Decimals>
+              {" ETH"}
+            </p>
+          }
         </div> :
         <div className=''>
           <CreateAccount
             accountAddress={smartAccountAddress ?? ''} />
         </div>
       }
-      <ContractInteractions />
-      <InteractWithProtocol />
-      <InteractViaEntryPoint />
+      {isContract(bytecode) &&
+        <>
+          <ContractInteractions />
+          <InteractWithProtocol />
+          <InteractViaEntryPoint />
+        </>
+      }
       {/* <AdvanceStepButton
         label="Generate Proof"
         href={"/prove?" + forwardSearchParams({ connected: address })}

@@ -11,7 +11,6 @@ import { SimpleProtocol } from "../src/SimpleProtocol.sol";
 import { BaseTest } from "./Base.t.sol";
 import { TestHelpers } from "./TestHelpers.sol";
 import { SimpleAccount } from "account-abstraction/contracts/samples/SimpleAccount.sol";
-import { console } from "forge-std/console.sol";
 
 contract AxiomPaymasterTest is AxiomTest, BaseTest {
     using Axiom for Query;
@@ -31,22 +30,21 @@ contract AxiomPaymasterTest is AxiomTest, BaseTest {
     AxiomPaymaster public paymaster;
     address payable public beneficiaryAddress;
     uint256 public constant MAX_REFUND_PER_BLOCK = 10_000 gwei;
-    SimpleAccount validAccount = SimpleAccount(payable(0x7658039b107dBAb91610A9Ad804f33C3E172469e));
 
     function setUp() public override {
-        _createSelectForkAndSetupAxiom("sepolia", 5_512_076);
+        _createSelectForkAndSetupAxiom("sepolia", 5_515_749);
         BaseTest.setUp();
 
         uint64[] memory blockNumbers = new uint64[](MAX_INPUT_LENGTH);
         uint64[] memory txIdxs = new uint64[](MAX_INPUT_LENGTH);
         uint64[] memory logIdxs = new uint64[](MAX_INPUT_LENGTH);
-        blockNumbers[0] = 5_512_033;
-        txIdxs[0] = 26;
+        blockNumbers[0] = 5_515_664;
+        txIdxs[0] = 29;
         logIdxs[0] = 0;
 
         for (uint256 i = 1; i < MAX_INPUT_LENGTH; i++) {
-            blockNumbers[i] = 5_512_371;
-            txIdxs[i] = 109;
+            blockNumbers[i] = 5_515_748;
+            txIdxs[i] = 59;
             logIdxs[i] = 0;
         }
 
@@ -54,7 +52,7 @@ contract AxiomPaymasterTest is AxiomTest, BaseTest {
             blockNumbers: blockNumbers,
             txIdxs: txIdxs,
             logIdxs: logIdxs,
-            // https://sepolia.etherscan.io/address/0x7658039b107dBAb91610A9Ad804f33C3E172469e
+            // https://sepolia.etherscan.io/address/0xFe7534363900492Fe14388F5779A3F772d5F42Eb
             addr: address(validAccount),
             // https://sepolia.etherscan.io/address/0x8A6cF8A2F64da5b7Dcd9FC3FcF71Cce8fB2B3d7e
             contractAddress: address(0x8A6cF8A2F64da5b7Dcd9FC3FcF71Cce8fB2B3d7e)
@@ -68,7 +66,6 @@ contract AxiomPaymasterTest is AxiomTest, BaseTest {
             entryPoint, axiomV2QueryAddress, uint64(block.chainid), querySchema, MAX_REFUND_PER_BLOCK
         );
 
-        // vm.deal({ account: payable(address(paymaster)), newBalance: 100 ether });
         // Fund entry point for paymaster
         entryPoint.depositTo{ value: 10 ether }(address(paymaster));
     }
@@ -194,6 +191,10 @@ contract AxiomPaymasterTest is AxiomTest, BaseTest {
         assertEq(newRefund, paymaster.refundValue(addr, protocolAddress));
 
         // Verify if user is refunded now
+        // Transfer ownership to an account that we can use to sign further txns
+        vm.startPrank({ msgSender: validAccount.owner() });
+        validAccount.transferOwnership(users.u1.addr);
+
         uint256 storedValue = 2;
         bytes memory storeCallData = abi.encodeWithSelector(SimpleProtocol.store.selector, storedValue);
         bytes memory callData =

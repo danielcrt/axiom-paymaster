@@ -18,7 +18,7 @@ export const useLogs = <TData extends Logs | undefined>(
     Number(parameters.fromBlock),
     Number(parameters.toBlock),
     JSON.stringify(
-      this,
+      parameters.args,
       (key, value) => (typeof value === "bigint" ? value.toString() : value) // return everything else unchanged
     ),
   ];

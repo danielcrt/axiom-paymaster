@@ -39,7 +39,7 @@ const InteractWithProtocol = () => {
       enabled: address !== undefined && args !== undefined
     }
   });
-  console.log('error', error)
+
   const { data: txHash, writeContract, isSuccess, isPending, reset } = useWriteContract();
   const queryClient = useQueryClient();
 

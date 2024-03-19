@@ -2,7 +2,7 @@
 pragma solidity 0.8.23;
 
 import { BaseScript } from "./Base.s.sol";
-import { SimpleAccountFactory } from "account-abstraction/contracts/samples/SimpleAccountFactory.sol";
+import { SimpleAccountFactory } from "../src/SimpleAccountFactory.sol";
 import { IEntryPoint } from "account-abstraction/contracts/interfaces/IEntryPoint.sol";
 
 contract DeployAccountFactory is BaseScript {

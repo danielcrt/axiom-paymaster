@@ -94,4 +94,19 @@ forge script script/DeployEntryPoint.s.sol --fork-url <RPC_URL> --broadcast
 forge script script/DeployAccountFactory.s.sol <ENTRY_POINT_ADDRESS> --sig "run(address)" --fork-url <RPC_URL> --broadcast
 ```
 
+
+### AxiomPaymaster
+
+Value that can be used for test purposes `MAX_REFUND_PER_BLOCK=10000000000000`
+
+```
+forge script script/DeployAxiomPaymaster.s.sol <ENTRY_POINT_ADDRESS> <MAX_REFUND_PER_BLOCK> --sig "run(address,uint256)" --fork-url <RPC_URL> --broadcast
+```
+
+### FundPaymaster
+
+```
+forge script script/FundPaymaster.s.sol <ENTRY_POINT_ADDRESS> <PAYMASTER_ADDRESS> <AMOUNT> --sig "run(address,address,uint256)" --fork-url <RPC_URL> --broadcast
+```
+
 If you are deploying to your local node, you must first start the node by running `anvil` in a separate terminal window

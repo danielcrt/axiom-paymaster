@@ -7,6 +7,10 @@ remappings = ["@axiom-crypto/axiom-std/=lib/axiom-std/src/"]
 ffi = true
 gas_reports = ["SimpleAccount.sol"]
 ast = true
+fs_permissions = [
+  { access = "read-write", path = ".axiom" },
+  { access = "read", path = "./app/axiom/data/" },
+]
 
 # See more config options https://github.com/foundry-rs/foundry/tree/master/config
 [rpc_endpoints]
