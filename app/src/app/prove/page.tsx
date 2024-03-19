@@ -53,7 +53,11 @@ export default async function Prove() {
   })
 
   const fetchValidInputs = useCallback(async (): Promise<void> => {
-    if (!logs || inputs) {
+    if (inputs) {
+      return;
+    }
+
+    if (!logs) {
       setInputs(null);
       return;
     };
