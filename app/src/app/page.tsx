@@ -3,7 +3,7 @@
 import Title from '@/components/ui/Title'
 import { isContract, shortenAddress } from '@/lib/utils'
 import CodeBox from '@/components/ui/CodeBox';
-import { Config, useBalance, useBlock, useBytecode, useReadContract } from 'wagmi';
+import { Config, useBytecode, useReadContract } from 'wagmi';
 import { Constants } from '@/shared/constants';
 import CreateAccount from '@/components/home/CreateAccount';
 import Link from 'next/link';
@@ -16,7 +16,6 @@ import Tooltip from '@/components/ui/Tooltip';
 import InteractViaEntryPoint from '@/components/home/InteractViaEntryPoint';
 import EntryPointAbi from '@/lib/abi/EntryPoint.json';
 import AxiomPaymasterAbi from '@/lib/abi/AxiomPaymaster.json';
-import { format } from 'date-fns';
 
 export default function Home() {
   const smartAccountAddress = useSmartAccount();
@@ -26,13 +25,6 @@ export default function Home() {
     address: smartAccountAddress as `0x${string}`,
     query: {
       enabled: smartAccountAddress !== undefined && isAddress(smartAccountAddress)
-    }
-  })
-
-  const { data: balance } = useBalance({
-    address: Constants.PAYMASTER_ADDRESS as `0x${string}`,
-    query: {
-      enabled: smartAccountAddress !== undefined && isAddress(smartAccountAddress) && isContract(bytecode)
     }
   })
 

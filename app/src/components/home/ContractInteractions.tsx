@@ -40,7 +40,7 @@ const ContractInteractions = () => {
             </tr>
           </thead>
           <tbody>
-            {logs?.map(log => <InteractionEntry log={log} />)}
+            {logs?.map(log => <InteractionEntry key={log.blockNumber!} log={log} />)}
           </tbody>
         </table>
         {!isPending && logs?.length === 0 &&

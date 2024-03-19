@@ -12,12 +12,32 @@ import { isAddress, parseAbiItem } from "viem";
 import { useLogs } from "@/lib/hooks/useLogs";
 import { Routes } from "@/shared/routes";
 import Link from "next/link";
-import { useMemo } from "react";
+import { useCallback, useEffect, useState } from "react";
 import Loading from "../loading";
+import { publicClient } from "@/lib/viemClient";
+import { Config, useReadContract } from "wagmi";
 
 const MAX_INPUTS = 52;
 export default async function Prove() {
   const smartAccountAddress = useSmartAccount();
+  const [inputs, setInputs] = useState<UserInput<typeof jsonInputs> | null>();
+
+  const { data: lastProvenBlock } = useReadContract<
+    typeof AxiomPaymasterAbi,
+    "lastProvenBlock",
+    [string, string],
+    Config,
+    bigint
+  >({
+    chainId: Constants.CHAIN_ID_SEPOLIA,
+    address: Constants.PAYMASTER_ADDRESS as `0x${string}`,
+    abi: AxiomPaymasterAbi,
+    functionName: "lastProvenBlock",
+    args: [smartAccountAddress, Constants.PROTOCOL_ADDRESS],
+    query: {
+      enabled: smartAccountAddress !== undefined && isAddress(smartAccountAddress)
+    }
+  });
 
   const { data: logs, isPending } = useLogs(Constants.CHAIN_ID_SEPOLIA, {
     address: Constants.PROTOCOL_ADDRESS,
@@ -26,60 +46,90 @@ export default async function Prove() {
       caller: smartAccountAddress as `0x${string}`,
     } as any,
     // Block at which the contract was deployed
-    fromBlock: BigInt(5483024),
+    fromBlock: lastProvenBlock === BigInt(0) ? BigInt(5483024) : lastProvenBlock,
     toBlock: 'latest'
   }, {
-    enabled: smartAccountAddress !== undefined && isAddress(smartAccountAddress)
+    enabled: smartAccountAddress !== undefined && isAddress(smartAccountAddress) && lastProvenBlock !== undefined
   })
 
-  const validTxSequence = useMemo((): Partial<UserInput<typeof jsonInputs>> | null => {
-    if (!logs) return null;
+  const fetchValidInputs = useCallback(async (): Promise<void> => {
+    if (!logs || inputs) {
+      setInputs(null);
+      return;
+    };
 
+    const validLogSequence = [];
     const validBlockSequence = [];
     const validTxIdxSequence = [];
+    const validLogIdxSequence = [];
 
+    /** 
+     * @todo This is prone to errors.
+     * E.g. If last tx was today but user had previous streak that ended 10 days ago, it will not be caught by this logic
+     */
     for (let i = logs.length - 1; i >= 0; i--) {
-      if (validBlockSequence.length === 0) {
-        validBlockSequence.push(Number(logs[i].blockNumber));
-        validTxIdxSequence.push(Number(logs[i].transactionIndex));
+      if (!lastProvenBlock || lastProvenBlock >= logs[i].blockNumber!) {
         continue;
       }
-      const lastIdx = validBlockSequence.length - 1;
-      if (validBlockSequence[lastIdx] !== null &&
+
+      if (validLogSequence.length === 0) {
+        validLogSequence.push(logs[i]);
+        continue;
+      }
+      const lastIdx = validLogSequence.length - 1;
+      if (
+        validLogSequence[lastIdx].blockNumber !== null &&
         logs[i].blockNumber !== null &&
-        validBlockSequence[lastIdx]! - Number(logs[i].blockNumber) < Constants.ONE_WEEK_IN_BLOCKS
+        Number(validLogSequence[lastIdx].blockNumber) - Number(logs[i].blockNumber) < Constants.ONE_WEEK_IN_BLOCKS
       ) {
         /** 
          * @todo This can be further optimized. 
          * It shoud look for the greatest block number window, no greater than one week in blocks 
          * Currently, this takes all transactions even if they are not required 
          */
-        validBlockSequence.push(Number(logs[i].blockNumber));
-        validTxIdxSequence.push(Number(logs[i].transactionIndex));
+        validLogSequence.push(logs[i]);
       }
     }
 
-    if (validBlockSequence.length < 2) {
-      return null;
+    if (validLogSequence.length < 2) {
+      setInputs(null);
+      return;
+    }
+
+    for (const validLog of validLogSequence) {
+      const receipt = await publicClient.getTransactionReceipt({
+        hash: validLog.transactionHash!
+      });
+
+      for (const [idx, log] of Array.from(receipt.logs.entries())) {
+        if (
+          log.topics[0] === Constants.STORE_INPUT_EVENT_SCHEMA &&
+          log.topics[1]?.toLowerCase() === bytes32(smartAccountAddress!.toLowerCase())
+        ) {
+          validBlockSequence.push(Number(validLog.blockNumber));
+          validTxIdxSequence.push(Number(validLog.transactionIndex));
+          validLogIdxSequence.push(Number(idx.toString()));
+        }
+      }
     }
 
     const ascBlocks = validBlockSequence.reverse();
     const ascTxIdxs = validTxIdxSequence.reverse();
+    const ascLogIdxs = validLogIdxSequence.reverse();
 
-    return {
+    setInputs({
       blockNumbers: padArray(ascBlocks, MAX_INPUTS, ascBlocks[ascBlocks.length - 1]),
       txIdxs: padArray(ascTxIdxs, MAX_INPUTS, ascTxIdxs[ascTxIdxs.length - 1]),
-    }
+      logIdxs: padArray(ascLogIdxs, MAX_INPUTS, ascLogIdxs[ascLogIdxs.length - 1]),
+      addr: smartAccountAddress!,
+      contractAddress: Constants.PROTOCOL_ADDRESS
+    })
   }, [logs])
 
-  const inputs: UserInput<typeof jsonInputs> = {
-    blockNumbers: validTxSequence?.blockNumbers ?? [],
-    txIdxs: validTxSequence?.txIdxs ?? [],
-    logIdxs: Array(MAX_INPUTS).fill(0),
-    addr: smartAccountAddress!,
-    contractAddress: Constants.PROTOCOL_ADDRESS
-  }
-
+  useEffect(() => {
+    fetchValidInputs();
+  }, [fetchValidInputs]);
+console.log(inputs)
   return (
     <>
       <Title>
@@ -90,8 +140,13 @@ export default async function Prove() {
       </div>
       {isPending ?
         <Loading /> :
-        validTxSequence === null ?
-          <p>Nothing to prove. Please <Link href={Routes.home}> interact with the protocol</Link> first </p> :
+        !inputs ?
+          <div>
+            <p>Nothing to prove. Please <Link href={Routes.home}> interact with the protocol</Link> first </p>
+            {lastProvenBlock !== undefined &&
+              <p>Last proven block: {Number(lastProvenBlock)}</p>
+            }
+          </div> :
           <div className="flex flex-col gap-2 items-center">
             <p>You are eligible for refunds for {inputs.blockNumbers[inputs.blockNumbers.length - 1] - inputs.blockNumbers[0]} blocks</p>
             <BuildQuery

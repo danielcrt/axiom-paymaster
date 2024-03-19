@@ -14,6 +14,7 @@ export const Constants = Object.freeze({
   // https://sepolia.etherscan.io/address/0x923D494db954090659f91B33Bd3786E7c16080FA#code
   PAYMASTER_ADDRESS: "0x923D494db954090659f91B33Bd3786E7c16080FA",
   ONE_WEEK_IN_BLOCKS: (7 * 24 * 3600) / 12,
+  STORE_INPUT_EVENT_SCHEMA: '0x43922a39f958ab664e689548bf78b1b6183f86b63685c7bbe03b1b73dd359041',
 });
 
 export const DEFAULT_USER_OP: UserOperation = {
@@ -24,7 +25,7 @@ export const DEFAULT_USER_OP: UserOperation = {
   callGasLimit: 150_000,
   verificationGasLimit: 150_000, // default verification gas. will add create2 cost (3200+200*length) if initCode exists
   preVerificationGas: 21_000, // should also cover calldata cost.
-  maxFeePerGas: 0,
+  maxFeePerGas: 1e9,
   maxPriorityFeePerGas: 1e9,
   paymaster: ZeroAddress,
   paymasterData: "0x",
