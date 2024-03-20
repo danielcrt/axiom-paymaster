@@ -1,4 +1,5 @@
 import Title from "@/components/ui/Title";
+import { Routes } from "@/shared/routes";
 import Link from "next/link";
 
 interface PageProps {
@@ -14,7 +15,7 @@ interface SearchParams {
   [key: string]: string | string[] | undefined;
 }
 
-export default async function Success({ searchParams }: PageProps) {
+export default function Success({ searchParams }: PageProps) {
   const txHash = searchParams?.txHash as string ?? "";
 
   return (
@@ -28,7 +29,7 @@ export default async function Success({ searchParams }: PageProps) {
       <Link href={`https://sepolia.etherscan.io/tx/${txHash}`} target="_blank">
         View on Etherscan
       </Link>
-      <Link href="/">
+      <Link href={Routes.home}>
         Start over
       </Link>
     </>

@@ -3,7 +3,7 @@
 import { useAxiomCircuit } from "@axiom-crypto/react";
 import { UserInput } from "@axiom-crypto/client";
 import jsonInputs from "../../../axiom/data/inputs.json";
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 import LoadingAnimation from "../ui/LoadingAnimation";
 import SubmitQuery from "./SubmitQuery";
 
@@ -20,6 +20,8 @@ export default function BuildQuery({
   refundee: string;
   callbackAbi: any[];
 }) {
+  const hasSetParams = useRef(false);
+  const hasBuiltQuery = useRef(false);
   const {
     build,
     builtQuery,
@@ -28,6 +30,9 @@ export default function BuildQuery({
   } = useAxiomCircuit<typeof jsonInputs>();
 
   useEffect(() => {
+    if (hasSetParams.current) return;
+    if (!inputs) return;
+    hasSetParams.current = true;
     setParams(inputs, callbackTarget, callbackExtraData, refundee);
   }, [setParams, inputs, callbackTarget, callbackExtraData, refundee]);
 
@@ -36,6 +41,8 @@ export default function BuildQuery({
       if (!areParamsSet) {
         return;
       }
+      if (hasBuiltQuery.current) return;
+      hasBuiltQuery.current = true;
       await build();
     };
     buildQuery();

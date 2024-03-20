@@ -16,7 +16,7 @@ export const useSmartAccount = () => {
     address: Constants.ACCOUNT_FACTORY_ADDRESS,
     abi: AccountFactoryAbi,
     functionName: "getAddress",
-    args: [address, 0],
+    args: [address, Constants.SMART_ACCOUNT_SALT],
     query: {
       enabled: address !== undefined,
     },

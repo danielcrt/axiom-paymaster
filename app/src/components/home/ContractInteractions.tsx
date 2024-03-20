@@ -4,6 +4,7 @@ import React, { } from 'react'
 import { isAddress, parseAbiItem } from 'viem';
 import InteractionEntry from './InteractionEntry';
 import { useLogs } from '@/lib/hooks/useLogs';
+import Loading from '@/app/loading';
 
 const ContractInteractions = () => {
   const smartAccountAddress = useSmartAccount();
@@ -43,6 +44,7 @@ const ContractInteractions = () => {
             {logs?.map(log => <InteractionEntry key={log.blockNumber!} log={log} />)}
           </tbody>
         </table>
+        {isPending && <Loading />}
         {!isPending && logs?.length === 0 &&
           <p className='text-center'>
             No protocol usage.

@@ -15,10 +15,11 @@ import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 import Loading from "../loading";
 import { publicClient } from "@/lib/viemClient";
-import { Config, useReadContract } from "wagmi";
+import { Config, useReadContract, useAccount } from "wagmi";
 
 const MAX_INPUTS = 52;
-export default async function Prove() {
+export default function Prove() {
+  const { address } = useAccount();
   const smartAccountAddress = useSmartAccount();
   const [inputs, setInputs] = useState<UserInput<typeof jsonInputs> | null>();
 
@@ -142,7 +143,7 @@ export default async function Prove() {
       <div className="text-center">
         Please wait while your browser generates a compute proof for the Axiom Query.
       </div>
-      {isPending ?
+      {isPending || inputs === undefined ?
         <Loading /> :
         !inputs ?
           <div>
@@ -156,8 +157,8 @@ export default async function Prove() {
             <BuildQuery
               inputs={inputs}
               callbackTarget={Constants.PAYMASTER_ADDRESS}
-              callbackExtraData={bytes32("")}
-              refundee={smartAccountAddress!}
+              callbackExtraData={""}
+              refundee={address!}
               callbackAbi={AxiomPaymasterAbi}
             />
           </div>

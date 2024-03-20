@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react'
+import React from 'react'
 import Button from '../ui/Button'
 import { useAccount, useBytecode, useSimulateContract, useWatchContractEvent, useWriteContract } from 'wagmi';
 import AccountFactoryAbi from '@/lib/abi/AccountFactory.json';
@@ -12,14 +12,13 @@ type CreateAccountProps = {
 }
 const CreateAccount = ({ accountAddress }: CreateAccountProps) => {
   const { address } = useAccount();
-  const [showExplorerLink, setShowExplorerLink] = useState(false);
 
   const { data } = useSimulateContract({
     chainId: Constants.CHAIN_ID_SEPOLIA,
     address: Constants.ACCOUNT_FACTORY_ADDRESS,
     abi: AccountFactoryAbi,
     functionName: 'createAccount',
-    args: [address, 0],
+    args: [address, Constants.SMART_ACCOUNT_SALT],
     query: {
       enabled: address !== undefined
     }
@@ -33,13 +32,6 @@ const CreateAccount = ({ accountAddress }: CreateAccountProps) => {
       enabled: accountAddress !== undefined && isAddress(accountAddress)
     }
   })
-  useEffect(() => {
-    if (isSuccess) {
-      setTimeout(() => {
-        setShowExplorerLink(true);
-      }, 15000);
-    }
-  }, [isSuccess, setShowExplorerLink]);
 
   useWatchContractEvent({
     address: accountAddress as `0x${string}`,
@@ -63,7 +55,7 @@ const CreateAccount = ({ accountAddress }: CreateAccountProps) => {
   }
 
   const renderExplorerLink = () => {
-    if (!showExplorerLink) {
+    if (!txHash) {
       return null;
     }
     return (

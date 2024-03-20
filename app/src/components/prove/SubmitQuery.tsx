@@ -32,7 +32,7 @@ export default function SubmitQuery({
     value: builtQuery!.value,
     args: builtQuery!.args,
   });
-  const { writeContract, isSuccess, isError, isPending } = useWriteContract();
+  const { writeContract, isSuccess, isPending } = useWriteContract();
 
   useEffect(() => {
     if (isSuccess) {
@@ -44,7 +44,7 @@ export default function SubmitQuery({
 
   // Monitor contract for `AxiomV2Call` event
   useWatchContractEvent({
-    address: Constants.CALLBACK_CONTRACT as `0x${string}`,
+    address: Constants.PAYMASTER_ADDRESS as `0x${string}`,
     abi: callbackAbi,
     eventName: 'AxiomV2Call',
     onLogs: (logs) => {

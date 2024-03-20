@@ -1,7 +1,7 @@
 import AdvanceStepButton from "@/components/ui/AdvanceStepButton";
 import Title from "@/components/ui/Title";
 
-export default async function Fail() {
+export default function Fail() {
 
   return (
     <>
