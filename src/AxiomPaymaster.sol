@@ -9,12 +9,13 @@ import "@openzeppelin/contracts/utils/cryptography/ECDSA.sol";
 import "@openzeppelin/contracts/utils/cryptography/MessageHashUtils.sol";
 import { AxiomV2Client } from "@axiom-crypto/v2-periphery/client/AxiomV2Client.sol";
 import { IAxiomV2Query } from "@axiom-crypto/v2-periphery/interfaces/query/IAxiomV2Query.sol";
+import { IAxiomPaymaster } from "./interfaces/IAxiomPaymaster.sol";
 
 interface IAxiomV2QueryExtended {
     function queries(uint256 queryId) external returns (IAxiomV2Query.AxiomQueryMetadata memory);
 }
 
-contract AxiomPaymaster is BasePaymaster, AxiomV2Client {
+contract AxiomPaymaster is IAxiomPaymaster, BasePaymaster, AxiomV2Client {
     using UserOperationLib for PackedUserOperation;
 
     uint128 public constant CALLDATA_ADDRESS_OFFSET = 4;
@@ -28,26 +29,11 @@ contract AxiomPaymaster is BasePaymaster, AxiomV2Client {
     /// @dev The chain ID of the chain whose data the callback is expected to be called from.
     uint64 immutable SOURCE_CHAIN_ID;
 
-    mapping(address => mapping(address => uint256)) public refundValue;
-    mapping(address => mapping(address => uint256)) public lastProvenBlock;
-    mapping(address => mapping(address => uint256)) public refundCutoff;
-
     /// @notice Max amount of ETH protocol offers as gas refund per block
     uint256 public maxRefundPerBlock;
 
-    /// @param user Address of the user for which the proof was submitted
-    /// @param protocol The address of the protocol's contract that user interacted with
-    /// @param refundValue The amount of gas that the user is eligible for the submitted proof
-    event UsageProved(address indexed user, address indexed protocol, uint256 refundValue);
-
-    /// @notice Thrown when gas limit set for the post operation is too low
-    error PostOpGasLimitTooLow();
-
-    /// @notice Thrown when user is not eligible for gas refund
-    error NotEligible();
-
-    /// @notice Thrown when user tries to prove something older than his last claim
-    error AlreadyProven();
+    /// @notice Mapping holding user allowances
+    mapping(address user => mapping(address protocol => UserAllowance allowance)) public allowances;
 
     /// @notice Construct a new AverageBalance contract.
     /// @param  _axiomV2QueryAddress The address of the AxiomV2Query contract.
@@ -64,6 +50,7 @@ contract AxiomPaymaster is BasePaymaster, AxiomV2Client {
         maxRefundPerBlock = _maxRefundPerBlock;
     }
 
+    /// @inheritdoc BasePaymaster
     function _validatePaymasterUserOp(
         PackedUserOperation calldata userOp,
         bytes32, /*userOpHash*/
@@ -77,11 +64,9 @@ contract AxiomPaymaster is BasePaymaster, AxiomV2Client {
             abi.decode(userOp.callData[CALLDATA_ADDRESS_OFFSET:CALLDATA_VALUE_OFFSET], (address));
 
         uint256 maxGasCost = userOp.gasPrice() * userOp.unpackCallGasLimit();
+        UserAllowance memory allowance = allowances[userOp.sender][protocolAddress];
 
-        if (
-            maxGasCost > refundValue[userOp.sender][protocolAddress]
-                || refundCutoff[userOp.sender][protocolAddress] < block.number
-        ) {
+        if (maxGasCost > allowance.refundValue || allowance.refundCutoff < block.number) {
             revert NotEligible();
         }
 
@@ -90,7 +75,7 @@ contract AxiomPaymaster is BasePaymaster, AxiomV2Client {
         validationResult = Helpers._packValidationData(false, 0, 0);
     }
 
-    /// @notice Performs post-operation tasks, such as updating the token price and refunding excess tokens.
+    /// @notice Performs post-operation tasks, such as updating the remaining refund
     /// @dev This function is called after a user operation has been executed or reverted.
     /// @param context The context containing the user sender address.
     /// @param actualGasCost The actual gas cost of the transaction.
@@ -103,7 +88,7 @@ contract AxiomPaymaster is BasePaymaster, AxiomV2Client {
     {
         (address payable userOpSender, address protocolAddress) = abi.decode(context, (address, address));
 
-        refundValue[userOpSender][protocolAddress] -= actualGasCost;
+        allowances[userOpSender][protocolAddress].refundValue -= uint160(actualGasCost);
     }
 
     /// @inheritdoc AxiomV2Client
@@ -115,7 +100,6 @@ contract AxiomPaymaster is BasePaymaster, AxiomV2Client {
         uint256, // queryId,
         bytes calldata // extraData
     ) internal view override {
-        // Add your validation logic here for checking the callback responses
         require(sourceChainId == SOURCE_CHAIN_ID, "Source chain ID does not match");
         require(querySchema == QUERY_SCHEMA, "Invalid query schema");
     }
@@ -131,25 +115,33 @@ contract AxiomPaymaster is BasePaymaster, AxiomV2Client {
     ) internal override {
         address addr = address(uint160(uint256(axiomResults[0])));
         address protocolAddress = address(uint160(uint256(axiomResults[1])));
-        uint256 blockNumberStart = uint256(axiomResults[2]);
-        uint256 blockNumberEnd = uint256(axiomResults[3]);
+        uint48 blockNumberStart = uint48(uint256(axiomResults[2]));
+        uint48 blockNumberEnd = uint48(uint256(axiomResults[3]));
+        UserAllowance memory allowance = allowances[addr][protocolAddress];
 
-        if (blockNumberStart <= lastProvenBlock[addr][protocolAddress]) {
+        if (blockNumberStart <= allowance.lastProvenBlock) {
             revert AlreadyProven();
         }
 
         uint256 axiomFee = IAxiomV2QueryExtended(axiomV2QueryAddress).queries(queryId).payment;
+        // Determine the max refund amount for proven period.
+        // This includes the Axiom query fee
         uint256 newRefund = (blockNumberEnd - blockNumberStart) * maxRefundPerBlock + axiomFee;
 
-        refundValue[addr][protocolAddress] += newRefund;
+        require(newRefund < type(uint160).max);
+        allowances[addr][protocolAddress].refundValue = uint160(newRefund);
 
-        uint256 newCutoff = block.number + blockNumberEnd - blockNumberStart;
-        if (newCutoff > refundCutoff[addr][protocolAddress]) {
-            refundCutoff[addr][protocolAddress] = newCutoff;
+        uint48 newCutoff = uint48(block.number) + blockNumberEnd - blockNumberStart;
+        if (newCutoff > allowance.refundCutoff) {
+            allowances[addr][protocolAddress].refundCutoff = newCutoff;
         }
 
-        lastProvenBlock[addr][protocolAddress] = blockNumberEnd;
+        allowances[addr][protocolAddress].lastProvenBlock = blockNumberEnd;
 
         emit UsageProved(addr, protocolAddress, newRefund);
+    }
+
+    function getAllowance(address user, address protocolAddress) public view returns (UserAllowance memory) {
+        return allowances[user][protocolAddress];
     }
 }

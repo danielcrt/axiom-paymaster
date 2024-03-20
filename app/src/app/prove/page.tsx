@@ -16,24 +16,25 @@ import { useCallback, useEffect, useState } from "react";
 import Loading from "../loading";
 import { publicClient } from "@/lib/viemClient";
 import { Config, useReadContract, useAccount } from "wagmi";
+import { UserAllowance } from "@/shared/types";
 
 const MAX_INPUTS = 52;
 export default function Prove() {
   const { address } = useAccount();
   const smartAccountAddress = useSmartAccount();
-  const [inputs, setInputs] = useState<UserInput<typeof jsonInputs> | null>();
+  const [inputs, setInputs] = useState<UserInput<typeof jsonInputs> | null | undefined>(undefined);
 
-  const { data: lastProvenBlock } = useReadContract<
+  const { data: allowance } = useReadContract<
     typeof AxiomPaymasterAbi,
-    "lastProvenBlock",
+    "getAllowance",
     [string, string],
     Config,
-    bigint
+    UserAllowance
   >({
     chainId: Constants.CHAIN_ID_SEPOLIA,
     address: Constants.PAYMASTER_ADDRESS as `0x${string}`,
     abi: AxiomPaymasterAbi,
-    functionName: "lastProvenBlock",
+    functionName: "getAllowance",
     args: [smartAccountAddress, Constants.PROTOCOL_ADDRESS],
     query: {
       enabled: smartAccountAddress !== undefined && isAddress(smartAccountAddress)
@@ -47,21 +48,16 @@ export default function Prove() {
       caller: smartAccountAddress as `0x${string}`,
     } as any,
     // Block at which the contract was deployed
-    fromBlock: lastProvenBlock === BigInt(0) ? BigInt(5483024) : lastProvenBlock,
+    fromBlock: (!allowance || allowance.lastProvenBlock === 0) ? BigInt(5483024) : BigInt(allowance.lastProvenBlock),
     toBlock: 'latest'
   }, {
-    enabled: smartAccountAddress !== undefined && isAddress(smartAccountAddress) && lastProvenBlock !== undefined
+    enabled: smartAccountAddress !== undefined && isAddress(smartAccountAddress) && allowance?.lastProvenBlock !== undefined
   })
 
   const fetchValidInputs = useCallback(async (): Promise<void> => {
-    if (inputs) {
+    if (inputs || !logs) {
       return;
     }
-
-    if (!logs) {
-      setInputs(null);
-      return;
-    };
 
     const validLogSequence = [];
     const validBlockSequence = [];
@@ -73,7 +69,7 @@ export default function Prove() {
      * E.g. If last tx was today but user had previous streak that ended 10 days ago, it will not be caught by this logic
      */
     for (let i = logs.length - 1; i >= 0; i--) {
-      if (!lastProvenBlock || lastProvenBlock >= logs[i].blockNumber!) {
+      if (allowance?.lastProvenBlock === undefined || BigInt(allowance.lastProvenBlock) >= logs[i].blockNumber!) {
         continue;
       }
 
@@ -148,8 +144,8 @@ export default function Prove() {
         !inputs ?
           <div>
             <p>Nothing to prove. Please <Link href={Routes.home}> interact with the protocol</Link> first </p>
-            {lastProvenBlock !== undefined &&
-              <p>Last proven block: {Number(lastProvenBlock)}</p>
+            {allowance?.lastProvenBlock !== undefined &&
+              <p>Last proven block: {allowance.lastProvenBlock}</p>
             }
           </div> :
           <div className="flex flex-col gap-2 items-center">

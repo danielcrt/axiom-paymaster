@@ -6,6 +6,7 @@ import "@axiom-crypto/axiom-std/AxiomTest.sol";
 import { PackedUserOperation } from "account-abstraction/contracts/interfaces/PackedUserOperation.sol";
 import { IEntryPoint } from "account-abstraction/contracts/interfaces/IEntryPoint.sol";
 import { AxiomPaymaster, IAxiomV2QueryExtended } from "../src/AxiomPaymaster.sol";
+import { IAxiomPaymaster } from "../src/interfaces/IAxiomPaymaster.sol";
 import { EntryPoint } from "account-abstraction/contracts/core/EntryPoint.sol";
 import { SimpleProtocol } from "../src/SimpleProtocol.sol";
 import { BaseTest } from "./Base.t.sol";
@@ -92,24 +93,12 @@ contract AxiomPaymasterTest is AxiomTest, BaseTest {
         PackedUserOperation[] memory packedOps = new PackedUserOperation[](1);
         packedOps[0] = opPacked;
 
-        // bytes32 userOpHash = getUserOpHash(userOp, address(entryPoint), block.chainid);
-        // // User has not submitted a proof so post op should revert
-        // vm.expectEmit(true, true, true, true, address(entryPoint));
-        // emit IEntryPoint.PostOpRevertReason(
-        //     userOpHash,
-        //     userOp.sender,
-        //     userOp.nonce,
-        //     abi.encodeWithSelector(
-        //         IEntryPoint.PostOpReverted.selector, abi.encodePacked(AxiomPaymaster.NotEligible.selector)
-        //     )
-        // );
-
         vm.expectRevert(
             abi.encodeWithSelector(
                 IEntryPoint.FailedOpWithRevert.selector,
                 0,
                 "AA33 reverted",
-                abi.encodePacked(AxiomPaymaster.NotEligible.selector)
+                abi.encodePacked(IAxiomPaymaster.NotEligible.selector)
             )
         );
 
@@ -143,14 +132,13 @@ contract AxiomPaymasterTest is AxiomTest, BaseTest {
                 IEntryPoint.FailedOpWithRevert.selector,
                 0,
                 "AA33 reverted",
-                abi.encodePacked(AxiomPaymaster.PostOpGasLimitTooLow.selector)
+                abi.encodePacked(IAxiomPaymaster.PostOpGasLimitTooLow.selector)
             )
         );
         entryPoint.handleOps(packedOps, beneficiaryAddress);
     }
 
     function test_proof_updates_state() public {
-        // uint256 axiomFee = 0.001 ether;
         uint256 axiomFee = 0;
 
         // create a query into Axiom with default parameters
@@ -181,14 +169,15 @@ contract AxiomPaymasterTest is AxiomTest, BaseTest {
         assertEq(protocolAddress, address(protocol));
 
         // verify the refund cutoff is calculated as expected in Paymaster
-        assertEq(fulfillBlockNumber + blockNumberEnd - blockNumberStart, paymaster.refundCutoff(addr, protocolAddress));
-        assertEq(blockNumberEnd, paymaster.lastProvenBlock(addr, protocolAddress));
-
-        // uint256 axiomFeez = IAxiomV2QueryExtended(axiomV2QueryAddress).queries(QUERY_ID).payment;
+        assertEq(
+            fulfillBlockNumber + blockNumberEnd - blockNumberStart,
+            paymaster.getAllowance(addr, protocolAddress).refundCutoff
+        );
+        assertEq(blockNumberEnd, paymaster.getAllowance(addr, protocolAddress).lastProvenBlock);
 
         uint256 newRefund = (blockNumberEnd - blockNumberStart) * MAX_REFUND_PER_BLOCK + axiomFee;
 
-        assertEq(newRefund, paymaster.refundValue(addr, protocolAddress));
+        assertEq(newRefund, paymaster.getAllowance(addr, protocolAddress).refundValue);
 
         // Verify if user is refunded now
         // Transfer ownership to an account that we can use to sign further txns
@@ -213,7 +202,7 @@ contract AxiomPaymasterTest is AxiomTest, BaseTest {
         PackedUserOperation[] memory packedOps = new PackedUserOperation[](1);
         packedOps[0] = opPacked;
 
-        uint256 refundValueBefore = paymaster.refundValue(addr, protocolAddress);
+        uint256 refundValueBefore = paymaster.getAllowance(addr, protocolAddress).refundValue;
 
         vm.startPrank({ msgSender: users.relayer.addr });
 
@@ -221,7 +210,7 @@ contract AxiomPaymasterTest is AxiomTest, BaseTest {
         emit SimpleProtocol.StoreInput(address(validAccount), storedValue);
 
         entryPoint.handleOps(packedOps, beneficiaryAddress);
-        uint256 refundValueAfter = paymaster.refundValue(addr, protocolAddress);
+        uint256 refundValueAfter = paymaster.getAllowance(addr, protocolAddress).refundValue;
 
         assertLt(refundValueAfter, refundValueBefore);
     }

@@ -28,3 +28,9 @@ export type PackedUserOperation = {
   paymasterAndData: string;
   signature: string;
 };
+
+export type UserAllowance = {
+  refundValue: bigint;
+  lastProvenBlock: number;
+  refundCutoff: number;
+}

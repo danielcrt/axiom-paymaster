@@ -1,5 +1,4 @@
 import TopBar from "../ui/TopBar"
-import Footer from "./Footer"
 
 export default function MainLayout({
   children,
@@ -13,9 +12,6 @@ export default function MainLayout({
         <div className="flex flex-col w-full h-full justify-center items-center gap-4">
           {children}
         </div>
-      </div>
-      <div className="flex flex-col justify-end h-20">
-        <Footer />
       </div>
     </div>
   )

@@ -16,6 +16,7 @@ import Tooltip from '@/components/ui/Tooltip';
 import InteractViaEntryPoint from '@/components/home/InteractViaEntryPoint';
 import EntryPointAbi from '@/lib/abi/EntryPoint.json';
 import AxiomPaymasterAbi from '@/lib/abi/AxiomPaymaster.json';
+import { UserAllowance } from '@/shared/types';
 
 export default function Home() {
   const smartAccountAddress = useSmartAccount();
@@ -42,34 +43,17 @@ export default function Home() {
     args: [Constants.PAYMASTER_ADDRESS],
   });
 
-  const { data: refundCutoff } = useReadContract<
+  const { data: allowance } = useReadContract<
     typeof AxiomPaymasterAbi,
-    "refundCutoff",
+    "getAllowance",
     [string, string],
     Config,
-    bigint
+    UserAllowance
   >({
     chainId: Constants.CHAIN_ID_SEPOLIA,
     address: Constants.PAYMASTER_ADDRESS as `0x${string}`,
     abi: AxiomPaymasterAbi,
-    functionName: "refundCutoff",
-    args: [smartAccountAddress, Constants.PROTOCOL_ADDRESS],
-    query: {
-      enabled: smartAccountAddress !== undefined && isAddress(smartAccountAddress) && isContract(bytecode)
-    }
-  });
-
-  const { data: refundValue } = useReadContract<
-    typeof AxiomPaymasterAbi,
-    "refundValue",
-    [string, string],
-    Config,
-    bigint
-  >({
-    chainId: Constants.CHAIN_ID_SEPOLIA,
-    address: Constants.PAYMASTER_ADDRESS as `0x${string}`,
-    abi: AxiomPaymasterAbi,
-    functionName: "refundValue",
+    functionName: "getAllowance",
     args: [smartAccountAddress, Constants.PROTOCOL_ADDRESS],
     query: {
       enabled: smartAccountAddress !== undefined && isAddress(smartAccountAddress) && isContract(bytecode)
@@ -115,20 +99,20 @@ export default function Home() {
             </Decimals>
             {" ETH"}
           </p>
-          {refundCutoff !== undefined &&
+          {allowance?.refundCutoff !== undefined &&
             <>
-              {refundCutoff === BigInt(0) ?
+              {allowance.refundCutoff === 0 ?
                 <p>Not eligible for refund</p> :
                 <p>
-                  Refund cutoff (block number): {Number(refundCutoff)}
+                  Refund cutoff (block number): {allowance.refundCutoff}
                 </p>
               }
             </>
           }
-          {refundValue !== undefined &&
+          {allowance?.refundValue !== undefined &&
             <p>
               Refund value:&nbsp;<Decimals decimals={6}>
-                {formatEther(BigInt(refundValue ?? 0)).toString()}
+                {formatEther(BigInt(allowance.refundValue ?? 0)).toString()}
               </Decimals>
               {" ETH"}
             </p>
@@ -146,10 +130,6 @@ export default function Home() {
           <InteractViaEntryPoint />
         </>
       }
-      {/* <AdvanceStepButton
-        label="Generate Proof"
-        href={"/prove?" + forwardSearchParams({ connected: address })}
-      /> */}
     </>
   )
 }
