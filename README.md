@@ -52,7 +52,7 @@ npx axiom circuit query-params <callback contract address> --refundAddress <your
 
 ## Package Manager Installation
 
-Install `npm` or `yarn` or `pnpm`:
+Install `npm` or `bun` or `yarn` or `pnpm`:
 
 ```bash
 # install nvm
